@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- macOS-style rounded rect clip for icon shape -->
+    <clipPath id="iconClip">
+      <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228"/>
+    </clipPath>
+
+    <!-- Subtle gradient for depth -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1E1E2E"/>
+      <stop offset="100%" stop-color="#0D0D1A"/>
+    </linearGradient>
+
+    <!-- Finger dot gradient - soft glow -->
+    <radialGradient id="dotGlow" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="1"/>
+      <stop offset="70%" stop-color="#D4D4F0" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#A0A0D0" stop-opacity="0.7"/>
+    </radialGradient>
+
+    <!-- Trackpad surface gradient -->
+    <linearGradient id="padGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2A2A40"/>
+      <stop offset="100%" stop-color="#1A1A30"/>
+    </linearGradient>
+
+    <!-- Soft shadow filter for dots -->
+    <filter id="dotShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#6366F1" flood-opacity="0.5"/>
+    </filter>
+
+    <!-- Subtle inner glow for trackpad -->
+    <filter id="padGlow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="0" stdDeviation="12" flood-color="#6366F1" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Clipped icon area -->
+  <g clip-path="url(#iconClip)">
+    <!-- Background -->
+    <rect width="1024" height="1024" fill="url(#bgGrad)"/>
+
+    <!-- Subtle grid texture -->
+    <g opacity="0.03">
+      <line x1="0" y1="256" x2="1024" y2="256" stroke="white" stroke-width="1"/>
+      <line x1="0" y1="512" x2="1024" y2="512" stroke="white" stroke-width="1"/>
+      <line x1="0" y1="768" x2="1024" y2="768" stroke="white" stroke-width="1"/>
+      <line x1="256" y1="0" x2="256" y2="1024" stroke="white" stroke-width="1"/>
+      <line x1="512" y1="0" x2="512" y2="1024" stroke="white" stroke-width="1"/>
+      <line x1="768" y1="0" x2="768" y2="1024" stroke="white" stroke-width="1"/>
+    </g>
+
+    <!-- Trackpad body -->
+    <rect x="172" y="420" width="680" height="440" rx="40" ry="40"
+          fill="url(#padGrad)" stroke="#3A3A5C" stroke-width="3"
+          filter="url(#padGlow)"/>
+
+    <!-- Trackpad inner bevel -->
+    <rect x="182" y="428" width="660" height="424" rx="34" ry="34"
+          fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="2"/>
+
+    <!-- Divider line on trackpad (like real MacBook trackpad click area) -->
+    <line x1="232" y1="780" x2="792" y2="780"
+          stroke="rgba(255,255,255,0.06)" stroke-width="2"/>
+
+    <!-- 4 Finger dots - the hero element -->
+    <!-- Finger 1 -->
+    <circle cx="278" cy="310" r="60" fill="url(#dotGlow)" filter="url(#dotShadow)"/>
+    <!-- Finger 2 -->
+    <circle cx="432" cy="280" r="60" fill="url(#dotGlow)" filter="url(#dotShadow)"/>
+    <!-- Finger 3 -->
+    <circle cx="592" cy="280" r="60" fill="url(#dotGlow)" filter="url(#dotShadow)"/>
+    <!-- Finger 4 -->
+    <circle cx="746" cy="310" r="60" fill="url(#dotGlow)" filter="url(#dotShadow)"/>
+
+    <!-- Touch ripples (contact points on trackpad) -->
+    <circle cx="278" cy="500" r="24" fill="none" stroke="#6366F1" stroke-width="2" opacity="0.3"/>
+    <circle cx="278" cy="500" r="40" fill="none" stroke="#6366F1" stroke-width="1.5" opacity="0.15"/>
+
+    <circle cx="432" cy="490" r="24" fill="none" stroke="#6366F1" stroke-width="2" opacity="0.3"/>
+    <circle cx="432" cy="490" r="40" fill="none" stroke="#6366F1" stroke-width="1.5" opacity="0.15"/>
+
+    <circle cx="592" cy="490" r="24" fill="none" stroke="#6366F1" stroke-width="2" opacity="0.3"/>
+    <circle cx="592" cy="490" r="40" fill="none" stroke="#6366F1" stroke-width="1.5" opacity="0.15"/>
+
+    <circle cx="746" cy="500" r="24" fill="none" stroke="#6366F1" stroke-width="2" opacity="0.3"/>
+    <circle cx="746" cy="500" r="40" fill="none" stroke="#6366F1" stroke-width="1.5" opacity="0.15"/>
+
+    <!-- Touch lines connecting fingers to contact points -->
+    <line x1="278" y1="370" x2="278" y2="476" stroke="rgba(255,255,255,0.08)" stroke-width="2" stroke-dasharray="4,6"/>
+    <line x1="432" y1="340" x2="432" y2="466" stroke="rgba(255,255,255,0.08)" stroke-width="2" stroke-dasharray="4,6"/>
+    <line x1="592" y1="340" x2="592" y2="466" stroke="rgba(255,255,255,0.08)" stroke-width="2" stroke-dasharray="4,6"/>
+    <line x1="746" y1="370" x2="746" y2="476" stroke="rgba(255,255,255,0.08)" stroke-width="2" stroke-dasharray="4,6"/>
+  </g>
+</svg>
