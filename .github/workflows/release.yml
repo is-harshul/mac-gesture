@@ -1,0 +1,95 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify build tools
+        run: |
+          xcode-select -p
+          swift --version
+
+      - name: Install librsvg (for icon generation)
+        run: brew install librsvg
+
+      - name: Run release script
+        run: |
+          chmod +x release.sh build.sh package_dmg.sh
+          ./release.sh
+
+      - name: Extract version & DMG path
+        id: info
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" build/MacGesture.app/Contents/Info.plist)
+          DMG_PATH="build/MacGesture-${VERSION}.dmg"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "dmg_path=${DMG_PATH}" >> "$GITHUB_OUTPUT"
+          ls -lh "$DMG_PATH"
+
+      - name: Check if release exists
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "v${{ steps.info.outputs.version }}" &>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create new release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.info.outputs.version }}"
+          DMG="${{ steps.info.outputs.dmg_path }}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+
+          gh release create "v${VERSION}" "$DMG" \
+            --title "Mac Gesture v${VERSION}" \
+            --notes "## Mac Gesture v${VERSION}
+
+          **[Download MacGesture-${VERSION}.dmg](https://github.com/is-harshul/mac-gesture/releases/download/v${VERSION}/MacGesture-${VERSION}.dmg)**
+
+          ### Install
+          1. Open the DMG → drag to Applications
+          2. Launch → grant Accessibility permission
+          3. 4-finger tap your trackpad!
+
+          > Right-click → Open if macOS warns about unidentified developer.
+
+          Built from \`${SHORT_SHA}\`"
+
+      - name: Update existing release
+        if: steps.check.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.info.outputs.version }}"
+          DMG="${{ steps.info.outputs.dmg_path }}"
+          DMG_NAME="MacGesture-${VERSION}.dmg"
+
+          gh release delete-asset "v${VERSION}" "$DMG_NAME" --yes 2>/dev/null || true
+          gh release upload "v${VERSION}" "$DMG" --clobber
+
+      - name: Summary
+        run: |
+          VERSION="${{ steps.info.outputs.version }}"
+          echo "## ✅ v${VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "[Download DMG](https://github.com/is-harshul/mac-gesture/releases/download/v${VERSION}/MacGesture-${VERSION}.dmg)" >> $GITHUB_STEP_SUMMARY
