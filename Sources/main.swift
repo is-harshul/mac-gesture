@@ -2,9 +2,6 @@ import Cocoa
 import Foundation
 import Carbon.HIToolbox
 
-#if !NO_SPARKLE
-import Sparkle
-#endif
 
 // ============================================================================
 // MARK: - MultitouchSupport Framework Bridge
@@ -457,9 +454,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var movementMenu: NSMenu!
     var currentActionLabel: NSMenuItem!
 
-    #if !NO_SPARKLE
-    var updaterController: SPUStandardUpdaterController!
-    #endif
 
     func applicationDidFinishLaunching(_ note: Notification) {
         print("========================================")
@@ -468,18 +462,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         loadPreferences()
 
-        #if !NO_SPARKLE
-        // Initialize Sparkle auto-updater.
-        // startingUpdater: true  → starts automatic background update checks
-        // updaterDelegate: nil   → use default behavior
-        // userDriverDelegate: nil
-        updaterController = SPUStandardUpdaterController(
-            startingUpdater: true,
-            updaterDelegate: nil,
-            userDriverDelegate: nil
-        )
-        print("🔄 Sparkle auto-updater initialized")
-        #endif
 
         checkAccessibility()
         setupStatusBar()
@@ -635,11 +617,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
 
         // ── UPDATES & INFO ──
-        #if !NO_SPARKLE
-        let updateItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "u")
-        updateItem.target = self
-        menu.addItem(updateItem)
-        #endif
 
         // Version
         let versionItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
@@ -739,11 +716,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func doRestart() { restartMonitoring() }
 
-    #if !NO_SPARKLE
-    @objc func checkForUpdates() {
-        updaterController.checkForUpdates(nil)
-    }
-    #endif
 }
 
 // ============================================================================

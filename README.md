@@ -18,11 +18,7 @@
 >
 > If macOS shows an "unidentified developer" warning: **right-click the app → Open → Open**.
 
-Releases are built automatically on every push to `main` via GitHub Actions.
-
----
-
-Mac Gesture is a lightweight macOS menu bar utility that maps a **4-finger trackpad tap** to any configurable action — a middle click, a keyboard shortcut, or a system command. It uses intelligent duration + movement filtering to cleanly separate intentional taps from swipes, pinches, and other macOS gestures, so all your existing trackpad gestures continue working perfectly.
+A new DMG is built and published automatically on every push to `main`.
 
 ---
 
@@ -76,16 +72,13 @@ Real taps are 30–100ms with almost no finger movement. Swipes are 200ms+ with 
   brew install librsvg
   ```
 
-### Build & Install
+### Build from Source
 
 ```bash
 git clone https://github.com/is-harshul/mac-gesture.git
 cd mac-gesture
 chmod +x build.sh
-./build.sh --no-sparkle      # without auto-updates (recommended for first use)
-# or
-./build.sh                    # with Sparkle auto-updates (downloads framework)
-
+./build.sh
 cp -r build/MacGesture.app /Applications/
 open /Applications/MacGesture.app
 ```
@@ -237,70 +230,54 @@ Use **"Test Action (2s delay)"** from the menu to verify event posting works ind
 
 ---
 
-## Auto-Updates (Sparkle)
-
-Mac Gesture includes the [Sparkle](https://sparkle-project.org/) framework for seamless auto-updates:
-
-- Checks for updates every 24 hours in the background
-- Users can click **"Check for Updates…"** in the menu
-- EdDSA signatures verify update authenticity
-
-### For developers
-
-See [RELEASING.md](RELEASING.md) for full setup:
-
-```bash
-# One-time: generate signing keys
-./vendor/Sparkle/bin/generate_keys
-# Set SUPublicEDKey + SUFeedURL in Info.plist
-
-# Per release:
-./build.sh
-./release.sh 2.3
-gh release create v2.3 releases/MacGesture-2.3.zip
-# Publish appcast.xml to GitHub Pages
-```
-
-Build without Sparkle: `./build.sh --no-sparkle`
-
----
-
 ## Distribution
 
 ```bash
-./build.sh           # Build the app
-./package_dmg.sh     # Create MacGesture-2.1.dmg
+./release.sh          # Builds app + creates DMG
 ```
 
-See [DISTRIBUTION.md](DISTRIBUTION.md) for notarization, Homebrew Cask, and other options.
+See [DISTRIBUTION.md](DISTRIBUTION.md) for notarization and Homebrew Cask options.
 
-> **Note:** This app cannot be published on the Mac App Store — it uses Apple's private `MultitouchSupport.framework` and requires Accessibility access outside the sandbox. Same reason BetterTouchTool and Karabiner-Elements distribute outside the store.
+> This app cannot be published on the Mac App Store — it uses Apple's private `MultitouchSupport.framework` and requires Accessibility access outside the sandbox.
+
+---
+
+## CI/CD
+
+Every push to `main` triggers a [GitHub Actions workflow](.github/workflows/release.yml) that:
+
+1. Runs `./release.sh` (builds app + creates DMG)
+2. Reads version from `Info.plist`
+3. Creates a GitHub Release with the DMG attached
+
+To publish a new version: bump the version in `Info.plist` and push to `main`. That's it.
+
+If the release tag already exists (same version, code fix), the workflow replaces the DMG on the existing release.
 
 ---
 
 ## Project Structure
 
 ```
-MacGesture/
+mac-gesture/
 ├── .github/
 │   └── workflows/
-│       └── release.yml       # CI: build + DMG + auto-release on push to main
+│       └── release.yml       # CI: runs release.sh on push to main
 ├── Sources/
-│   └── main.swift            # Complete app (~750 lines, zero dependencies)
-├── Info.plist                # App bundle metadata + Sparkle config + version
+│   └── main.swift            # Complete app (~730 lines, zero dependencies)
+├── Info.plist                # App bundle metadata + version
 ├── icon.svg                  # App icon (4 dots + trackpad)
-├── build.sh                  # Build: [--no-sparkle] icon + compile + bundle
-├── release.sh                # Signed release archive + appcast generation
-├── package_dmg.sh            # Distributable .dmg with drag-to-Applications
+├── build.sh                  # Compile + icon generation + .app bundle
+├── release.sh                # build.sh + DMG packaging
+├── package_dmg.sh            # .dmg with drag-to-Applications
 ├── generate_icon.sh          # Standalone SVG → .icns converter
-├── RELEASING.md              # Sparkle auto-update setup guide
 ├── DISTRIBUTION.md           # Notarization & distribution guide
 ├── LICENSE                   # MIT
 ├── .gitignore
 └── README.md
 ```
 
-Single Swift file. No Xcode project. No Swift packages. No CocoaPods.
+Single Swift file. No Xcode project. No package manager. No external dependencies.
 
 ---
 
@@ -316,21 +293,6 @@ Single Swift file. No Xcode project. No Swift packages. No CocoaPods.
 
 ---
 
-## CI/CD
-
-Every push to `main` triggers a [GitHub Actions workflow](.github/workflows/release.yml) that:
-
-1. Builds the app (without Sparkle, for clean CI)
-2. Generates the app icon from SVG
-3. Packages a DMG
-4. Creates or updates a GitHub Release with the DMG attached
-
-The version is read from `Info.plist` → `CFBundleShortVersionString`. To publish a new release, just bump the version in `Info.plist` and push to `main`.
-
-If the release tag already exists (same version, code-only fix), the workflow replaces the DMG asset on the existing release.
-
----
-
 ## Contributing
 
 Contributions welcome! Ideas:
@@ -340,7 +302,6 @@ Contributions welcome! Ideas:
 - **Multiple gesture mappings** — different actions for different finger counts
 - **Double-tap detection** — two quick 4-finger taps for a different action
 - **SwiftUI settings window** — richer UI than a menu
-- **Sparkle auto-update** integration testing
 
 ---
 

@@ -2,12 +2,11 @@
 # ============================================================================
 # MacGesture — Build Script
 # ============================================================================
-# Compiles Swift, generates icon, optionally embeds Sparkle, and packages
-# into a macOS .app bundle.
+# Generates the app icon, compiles Swift, and packages into a .app bundle.
 #
 # Usage:
-#   ./build.sh                # Build with Sparkle (downloads if needed)
-#   ./build.sh --no-sparkle   # Build without Sparkle (for CI or simple use)
+#   chmod +x build.sh
+#   ./build.sh
 #
 # Requirements:
 #   macOS 12+, Xcode Command Line Tools (xcode-select --install)
@@ -17,92 +16,26 @@
 set -e
 
 APP_NAME="MacGesture"
-SPARKLE_VERSION="2.7.5"
 BUILD_DIR="./build"
-VENDOR_DIR="./vendor"
 APP_BUNDLE="${BUILD_DIR}/${APP_NAME}.app"
 CONTENTS="${APP_BUNDLE}/Contents"
 MACOS="${CONTENTS}/MacOS"
 RESOURCES="${CONTENTS}/Resources"
-FRAMEWORKS="${CONTENTS}/Frameworks"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-# ── Parse flags ──
-NO_SPARKLE=0
-for arg in "$@"; do
-    case "$arg" in
-        --no-sparkle) NO_SPARKLE=1 ;;
-    esac
-done
 
 echo "========================================"
 echo "  Building ${APP_NAME}"
-if [ "$NO_SPARKLE" -eq 1 ]; then
-    echo "  (without Sparkle)"
-fi
 echo "========================================"
 echo ""
 
 # ── Clean ──
 rm -rf "${BUILD_DIR}"
-mkdir -p "${MACOS}" "${RESOURCES}" "${FRAMEWORKS}"
+mkdir -p "${MACOS}" "${RESOURCES}"
 
 # ==========================================
-# Step 1: Sparkle (skip if --no-sparkle)
+# Step 1: Generate Icon
 # ==========================================
-SPARKLE_DIR="${VENDOR_DIR}/Sparkle"
-SPARKLE_FRAMEWORK="${SPARKLE_DIR}/Sparkle.framework"
-
-if [ "$NO_SPARKLE" -eq 0 ]; then
-    echo "📥 Step 1: Sparkle framework..."
-
-    if [ -d "$SPARKLE_FRAMEWORK" ]; then
-        echo "   Using cached Sparkle ${SPARKLE_VERSION}"
-    else
-        echo "   Downloading Sparkle ${SPARKLE_VERSION}..."
-        mkdir -p "$VENDOR_DIR"
-        rm -rf "$SPARKLE_DIR"
-
-        SPARKLE_URL="https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
-        TEMP_TAR="${VENDOR_DIR}/sparkle.tar.xz"
-
-        if curl -fsSL -o "$TEMP_TAR" "$SPARKLE_URL" 2>/dev/null; then
-            echo "   Downloaded"
-        else
-            echo "   ⚠️  Download failed. Building without Sparkle."
-            echo "   To retry: rm -rf vendor/ && ./build.sh"
-            NO_SPARKLE=1
-        fi
-
-        if [ "$NO_SPARKLE" -eq 0 ]; then
-            mkdir -p "$SPARKLE_DIR"
-            tar -xf "$TEMP_TAR" -C "$SPARKLE_DIR"
-            rm -f "$TEMP_TAR"
-
-            if [ ! -d "$SPARKLE_FRAMEWORK" ]; then
-                FOUND=$(find "$SPARKLE_DIR" -name "Sparkle.framework" -type d -maxdepth 3 | head -1)
-                if [ -n "$FOUND" ]; then
-                    mv "$FOUND" "$SPARKLE_FRAMEWORK"
-                else
-                    echo "   ❌ Sparkle.framework not found in archive. Continuing without."
-                    NO_SPARKLE=1
-                fi
-            fi
-
-            if [ "$NO_SPARKLE" -eq 0 ]; then
-                echo "   ✅ Sparkle ${SPARKLE_VERSION} ready"
-            fi
-        fi
-    fi
-else
-    echo "⏭️  Step 1: Skipping Sparkle (--no-sparkle)"
-fi
-
-# ==========================================
-# Step 2: Generate Icon
-# ==========================================
-echo ""
-echo "🎨 Step 2: Generating app icon..."
+echo "🎨 Step 1: Generating app icon..."
 ICNS_FILE="${SCRIPT_DIR}/AppIcon.icns"
 SVG_FILE="${SCRIPT_DIR}/icon.svg"
 PNG_1024="${SCRIPT_DIR}/_icon_1024.png"
@@ -141,73 +74,43 @@ fi
 [ -f "$ICNS_FILE" ] && cp "$ICNS_FILE" "${RESOURCES}/AppIcon.icns"
 
 # ==========================================
-# Step 3: Compile
+# Step 2: Compile
 # ==========================================
 echo ""
-echo "📦 Step 3: Compiling Swift..."
+echo "📦 Step 2: Compiling Swift..."
 
 ARCH=$(uname -m)
 echo "   Architecture: ${ARCH}"
 
-SWIFT_FLAGS=(
-    -O
-    -framework Cocoa
-    -framework ApplicationServices
-    -framework Carbon
-)
-
-if [ "$NO_SPARKLE" -eq 0 ] && [ -d "$SPARKLE_FRAMEWORK" ]; then
-    SWIFT_FLAGS+=(
-        -F "${VENDOR_DIR}/Sparkle"
-        -framework Sparkle
-        -Xlinker -rpath -Xlinker "@executable_path/../Frameworks"
-    )
-    echo "   Linking with Sparkle ✓"
-else
-    SWIFT_FLAGS+=(-D NO_SPARKLE)
-    echo "   Building without Sparkle"
-fi
-
 swiftc \
-    "${SWIFT_FLAGS[@]}" \
+    -O \
+    -framework Cocoa \
+    -framework ApplicationServices \
+    -framework Carbon \
     -o "${MACOS}/${APP_NAME}" \
     Sources/main.swift
 
 echo "   ✅ Compiled successfully"
 
 # ==========================================
-# Step 4: Bundle
+# Step 3: Bundle
 # ==========================================
 echo ""
-echo "📁 Step 4: Packaging app bundle..."
+echo "📁 Step 3: Packaging app bundle..."
 
 cp Info.plist "${CONTENTS}/Info.plist"
 chmod +x "${MACOS}/${APP_NAME}"
 
-# Embed Sparkle framework if available
-if [ "$NO_SPARKLE" -eq 0 ] && [ -d "$SPARKLE_FRAMEWORK" ]; then
-    cp -R "$SPARKLE_FRAMEWORK" "${FRAMEWORKS}/"
-    echo "   Sparkle.framework embedded ✓"
-fi
-
-echo "   ✅ ${APP_BUNDLE}"
-
-# ==========================================
-# Read version from Info.plist
-# ==========================================
+# Read version
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "${CONTENTS}/Info.plist" 2>/dev/null || echo "unknown")
 
+echo "   ✅ ${APP_BUNDLE}"
 echo ""
 echo "========================================"
 echo "  ✅ Build successful! (v${VERSION})"
 echo "========================================"
 echo ""
-echo "  Install:"
-echo "    cp -r ${APP_BUNDLE} /Applications/"
-echo ""
-echo "  Run:"
-echo "    open /Applications/${APP_NAME}.app"
-echo ""
-echo "  Create DMG:"
-echo "    ./package_dmg.sh"
+echo "  Install:    cp -r ${APP_BUNDLE} /Applications/"
+echo "  Run:        open /Applications/${APP_NAME}.app"
+echo "  Create DMG: ./package_dmg.sh"
 echo ""

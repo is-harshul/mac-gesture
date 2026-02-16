@@ -12,32 +12,6 @@
     <string>2.2</string>
     <key>CFBundleShortVersionString</key>
     <string>2.2</string>
-
-    <!-- Sparkle Auto-Update Configuration -->
-    <!-- IMPORTANT: Replace these with your real values before releasing.
-         See RELEASING.md for setup instructions. -->
-
-    <!-- URL where the appcast XML is hosted -->
-    <key>SUFeedURL</key>
-    <string>https://is-harshul.github.io/mac-gesture/appcast.xml</string>
-
-    <!-- EdDSA public key for verifying update signatures.
-         Generate with: vendor/Sparkle/bin/generate_keys
-         Then paste the PUBLIC key here. -->
-    <key>SUPublicEDKey</key>
-    <string>PASTE_YOUR_EdDSA_PUBLIC_KEY_HERE</string>
-
-    <!-- Check for updates automatically (user can override in Sparkle UI) -->
-    <key>SUEnableAutomaticChecks</key>
-    <true/>
-
-    <!-- Check every 24 hours (86400 seconds) -->
-    <key>SUScheduledCheckInterval</key>
-    <integer>86400</integer>
-
-    <!-- Allow the update to be downloaded in the background -->
-    <key>SUAutomaticallyUpdate</key>
-    <false/>
     <key>CFBundleExecutable</key>
     <string>MacGesture</string>
     <key>CFBundleIconFile</key>
