@@ -1,17 +1,32 @@
 # Build output
 build/
+*.app
 *.dmg
+
+# Sparkle framework (downloaded during build)
+vendor/
+
+# Release artifacts
+releases/
+
+# Generated icon files
+AppIcon.icns
+AppIcon.iconset/
+_icon_*.png
+*.iconset/
 
 # macOS
 .DS_Store
-.AppleDouble
-.LSOverride
+._*
 
-# Xcode (if added later)
-*.xcworkspace
-*.xcodeproj
+# Xcode (if someone opens with Xcode later)
+*.xcodeproj/
+*.xcworkspace/
 xcuserdata/
+DerivedData/
 
-# Swift
-.build/
-.swiftpm/
+# Editor
+.vscode/
+.idea/
+*.swp
+*~

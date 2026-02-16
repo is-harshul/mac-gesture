@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-# FourFingerTap — Package as DMG for Distribution
+# MacGesture — Package as DMG for Distribution
 # ============================================================================
 # Creates a distributable .dmg with the app and Applications symlink.
 #
@@ -11,8 +11,8 @@
 
 set -e
 
-APP_NAME="FourFingerTap"
-VERSION="2.1"
+APP_NAME="MacGesture"
+VERSION="2.2"
 BUILD_DIR="./build"
 APP_BUNDLE="${BUILD_DIR}/${APP_NAME}.app"
 DMG_DIR="${BUILD_DIR}/dmg_staging"
@@ -37,14 +37,14 @@ ln -s /Applications "$DMG_DIR/Applications"
 
 # Create a README in the DMG
 cat > "$DMG_DIR/READ ME FIRST.txt" << 'EOF'
-FourFingerTap
+MacGesture
 =============
 
 Installation:
-  Drag FourFingerTap.app into the Applications folder.
+  Drag MacGesture.app into the Applications folder.
 
 First Launch:
-  1. Open FourFingerTap from Applications
+  1. Open MacGesture from Applications
   2. Grant Accessibility permission when prompted
      (System Settings → Privacy & Security → Accessibility)
   3. Done! Tap the trackpad with 4 fingers to trigger your action.

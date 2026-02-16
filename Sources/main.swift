@@ -2,6 +2,10 @@ import Cocoa
 import Foundation
 import Carbon.HIToolbox
 
+#if !NO_SPARKLE
+import Sparkle
+#endif
+
 // ============================================================================
 // MARK: - MultitouchSupport Framework Bridge
 // ============================================================================
@@ -453,12 +457,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var movementMenu: NSMenu!
     var currentActionLabel: NSMenuItem!
 
+    #if !NO_SPARKLE
+    var updaterController: SPUStandardUpdaterController!
+    #endif
+
     func applicationDidFinishLaunching(_ note: Notification) {
         print("========================================")
-        print("  FourFingerTap v2.1")
+        print("  MacGesture v2.2")
         print("========================================")
 
         loadPreferences()
+
+        #if !NO_SPARKLE
+        // Initialize Sparkle auto-updater.
+        // startingUpdater: true  → starts automatic background update checks
+        // updaterDelegate: nil   → use default behavior
+        // userDriverDelegate: nil
+        updaterController = SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        )
+        print("🔄 Sparkle auto-updater initialized")
+        #endif
+
         checkAccessibility()
         setupStatusBar()
         startMultitouchMonitoring()
@@ -479,7 +501,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if !trusted {
             let a = NSAlert()
             a.messageText = "Accessibility Permission Required"
-            a.informativeText = "FourFingerTap needs Accessibility permission to simulate clicks and keystrokes.\n\nGrant it in:\nSystem Settings → Privacy & Security → Accessibility"
+            a.informativeText = "MacGesture needs Accessibility permission to simulate clicks and keystrokes.\n\nGrant it in:\nSystem Settings → Privacy & Security → Accessibility"
             a.alertStyle = .warning
             a.addButton(withTitle: "Open System Settings")
             a.addButton(withTitle: "Continue")
@@ -500,8 +522,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func updateIcon() {
         statusItem.button?.image = createMenuBarIcon(enabled: isEnabled)
         statusItem.button?.toolTip = isEnabled
-            ? "FourFingerTap — \(currentAction.displayName)"
-            : "FourFingerTap — Disabled"
+            ? "MacGesture — \(currentAction.displayName)"
+            : "MacGesture — Disabled"
     }
 
     func rebuildMenu() {
@@ -511,7 +533,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Header
         let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         header.isEnabled = false
-        header.attributedTitle = NSAttributedString(string: "FourFingerTap",
+        header.attributedTitle = NSAttributedString(string: "MacGesture",
             attributes: [.font: NSFont.boldSystemFont(ofSize: 13)])
         menu.addItem(header)
 
@@ -612,7 +634,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        menu.addItem(NSMenuItem(title: "Quit FourFingerTap", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        // ── UPDATES & INFO ──
+        #if !NO_SPARKLE
+        let updateItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "u")
+        updateItem.target = self
+        menu.addItem(updateItem)
+        #endif
+
+        // Version
+        let versionItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        versionItem.isEnabled = false
+        let versionStr = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.2"
+        versionItem.attributedTitle = NSAttributedString(
+            string: "Version \(versionStr)",
+            attributes: [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor.tertiaryLabelColor]
+        )
+        menu.addItem(versionItem)
+
+        menu.addItem(.separator())
+
+        menu.addItem(NSMenuItem(title: "Quit MacGesture", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
         statusItem.menu = menu
     }
@@ -697,6 +738,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func doRestart() { restartMonitoring() }
+
+    #if !NO_SPARKLE
+    @objc func checkForUpdates() {
+        updaterController.checkForUpdates(nil)
+    }
+    #endif
 }
 
 // ============================================================================
