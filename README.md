@@ -5,19 +5,20 @@
 ![macOS 12+](https://img.shields.io/badge/macOS-12%2B-black?logo=apple&logoColor=white)
 ![Swift](https://img.shields.io/badge/Swift-5.7+-F05138?logo=swift&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-![Status](https://img.shields.io/badge/Status-Stable-green)
+![Build](https://github.com/is-harshul/mac-gesture/actions/workflows/release.yml/badge.svg)
+![GitHub Release](https://img.shields.io/github/v/release/is-harshul/mac-gesture?label=Latest)
 
 ---
 
 ## ⬇️ Download
 
-**[Download Mac Gesture v2.2 (DMG)](https://github.com/is-harshul/mac-gesture/releases/latest/download/MacGesture-2.2.dmg)**
+**[Download Latest Release (DMG)](https://github.com/is-harshul/mac-gesture/releases/latest)**
 
 > Open the DMG → drag **MacGesture.app** into **Applications** → launch → grant Accessibility permission → done.
 >
 > If macOS shows an "unidentified developer" warning: **right-click the app → Open → Open**.
 
-Or via the [Releases page](https://github.com/is-harshul/mac-gesture/releases) for all versions.
+Releases are built automatically on every push to `main` via GitHub Actions.
 
 ---
 
@@ -81,7 +82,10 @@ Real taps are 30–100ms with almost no finger movement. Swipes are 200ms+ with 
 git clone https://github.com/is-harshul/mac-gesture.git
 cd mac-gesture
 chmod +x build.sh
-./build.sh
+./build.sh --no-sparkle      # without auto-updates (recommended for first use)
+# or
+./build.sh                    # with Sparkle auto-updates (downloads framework)
+
 cp -r build/MacGesture.app /Applications/
 open /Applications/MacGesture.app
 ```
@@ -278,11 +282,14 @@ See [DISTRIBUTION.md](DISTRIBUTION.md) for notarization, Homebrew Cask, and othe
 
 ```
 MacGesture/
+├── .github/
+│   └── workflows/
+│       └── release.yml       # CI: build + DMG + auto-release on push to main
 ├── Sources/
 │   └── main.swift            # Complete app (~750 lines, zero dependencies)
-├── Info.plist                # App bundle metadata + Sparkle config
+├── Info.plist                # App bundle metadata + Sparkle config + version
 ├── icon.svg                  # App icon (4 dots + trackpad)
-├── build.sh                  # Build: Sparkle download + icon + compile + bundle
+├── build.sh                  # Build: [--no-sparkle] icon + compile + bundle
 ├── release.sh                # Signed release archive + appcast generation
 ├── package_dmg.sh            # Distributable .dmg with drag-to-Applications
 ├── generate_icon.sh          # Standalone SVG → .icns converter
@@ -306,6 +313,21 @@ Single Swift file. No Xcode project. No Swift packages. No CocoaPods.
 | Build tools | Xcode Command Line Tools |
 | Runtime | Accessibility permission |
 | Network | None (fully offline) |
+
+---
+
+## CI/CD
+
+Every push to `main` triggers a [GitHub Actions workflow](.github/workflows/release.yml) that:
+
+1. Builds the app (without Sparkle, for clean CI)
+2. Generates the app icon from SVG
+3. Packages a DMG
+4. Creates or updates a GitHub Release with the DMG attached
+
+The version is read from `Info.plist` → `CFBundleShortVersionString`. To publish a new release, just bump the version in `Info.plist` and push to `main`.
+
+If the release tag already exists (same version, code-only fix), the workflow replaces the DMG asset on the existing release.
 
 ---
 

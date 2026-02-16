@@ -12,16 +12,19 @@
 set -e
 
 APP_NAME="MacGesture"
-VERSION="2.2"
 BUILD_DIR="./build"
 APP_BUNDLE="${BUILD_DIR}/${APP_NAME}.app"
-DMG_DIR="${BUILD_DIR}/dmg_staging"
-DMG_OUTPUT="${BUILD_DIR}/${APP_NAME}-${VERSION}.dmg"
 
 if [ ! -d "$APP_BUNDLE" ]; then
     echo "❌ App bundle not found. Run ./build.sh first."
     exit 1
 fi
+
+# Read version from the built app's Info.plist
+VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "${APP_BUNDLE}/Contents/Info.plist" 2>/dev/null || echo "0.0")
+
+DMG_DIR="${BUILD_DIR}/dmg_staging"
+DMG_OUTPUT="${BUILD_DIR}/${APP_NAME}-${VERSION}.dmg"
 
 echo "📦 Creating DMG..."
 

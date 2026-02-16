@@ -2,16 +2,16 @@
 # ============================================================================
 # MacGesture — Build Script
 # ============================================================================
-# Downloads Sparkle framework, generates the app icon, compiles Swift,
-# and packages everything into a macOS .app bundle with auto-update support.
+# Compiles Swift, generates icon, optionally embeds Sparkle, and packages
+# into a macOS .app bundle.
+#
+# Usage:
+#   ./build.sh                # Build with Sparkle (downloads if needed)
+#   ./build.sh --no-sparkle   # Build without Sparkle (for CI or simple use)
 #
 # Requirements:
 #   macOS 12+, Xcode Command Line Tools (xcode-select --install)
-#   Optional: brew install librsvg (for best SVG→PNG conversion)
-#
-# Usage:
-#   chmod +x build.sh
-#   ./build.sh
+#   Optional: brew install librsvg (for SVG icon generation)
 # ============================================================================
 
 set -e
@@ -27,78 +27,75 @@ RESOURCES="${CONTENTS}/Resources"
 FRAMEWORKS="${CONTENTS}/Frameworks"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# ── Parse flags ──
+NO_SPARKLE=0
+for arg in "$@"; do
+    case "$arg" in
+        --no-sparkle) NO_SPARKLE=1 ;;
+    esac
+done
+
 echo "========================================"
 echo "  Building ${APP_NAME}"
+if [ "$NO_SPARKLE" -eq 1 ]; then
+    echo "  (without Sparkle)"
+fi
 echo "========================================"
 echo ""
 
-# --- Clean build ---
+# ── Clean ──
 rm -rf "${BUILD_DIR}"
 mkdir -p "${MACOS}" "${RESOURCES}" "${FRAMEWORKS}"
 
 # ==========================================
-# Step 1: Download Sparkle
+# Step 1: Sparkle (skip if --no-sparkle)
 # ==========================================
-echo "📥 Step 1: Sparkle framework..."
-
 SPARKLE_DIR="${VENDOR_DIR}/Sparkle"
 SPARKLE_FRAMEWORK="${SPARKLE_DIR}/Sparkle.framework"
 
-if [ -d "$SPARKLE_FRAMEWORK" ]; then
-    echo "   Using cached Sparkle ${SPARKLE_VERSION}"
-else
-    echo "   Downloading Sparkle ${SPARKLE_VERSION}..."
-    mkdir -p "$VENDOR_DIR"
-    rm -rf "$SPARKLE_DIR"
+if [ "$NO_SPARKLE" -eq 0 ]; then
+    echo "📥 Step 1: Sparkle framework..."
 
-    SPARKLE_URL="https://github.com/nicklama/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
-    SPARKLE_URL_ALT="https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
-
-    TEMP_TAR="${VENDOR_DIR}/sparkle.tar.xz"
-
-    # Try official Sparkle release
-    if curl -fsSL -o "$TEMP_TAR" "$SPARKLE_URL_ALT" 2>/dev/null; then
-        echo "   Downloaded from sparkle-project/Sparkle"
-    elif curl -fsSL -o "$TEMP_TAR" "$SPARKLE_URL" 2>/dev/null; then
-        echo "   Downloaded from mirror"
+    if [ -d "$SPARKLE_FRAMEWORK" ]; then
+        echo "   Using cached Sparkle ${SPARKLE_VERSION}"
     else
-        echo ""
-        echo "   ⚠️  Could not download Sparkle automatically."
-        echo ""
-        echo "   Please download manually:"
-        echo "     1. Go to: https://github.com/sparkle-project/Sparkle/releases"
-        echo "     2. Download Sparkle-${SPARKLE_VERSION}.tar.xz (or latest 2.x)"
-        echo "     3. Extract and place Sparkle.framework in: ${SPARKLE_DIR}/"
-        echo ""
-        echo "   Or build without Sparkle:"
-        echo "     ./build.sh --no-sparkle"
-        echo ""
+        echo "   Downloading Sparkle ${SPARKLE_VERSION}..."
+        mkdir -p "$VENDOR_DIR"
+        rm -rf "$SPARKLE_DIR"
 
-        if [[ "$1" == "--no-sparkle" ]]; then
-            echo "   Continuing WITHOUT Sparkle (no auto-update)..."
-            NO_SPARKLE=1
+        SPARKLE_URL="https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
+        TEMP_TAR="${VENDOR_DIR}/sparkle.tar.xz"
+
+        if curl -fsSL -o "$TEMP_TAR" "$SPARKLE_URL" 2>/dev/null; then
+            echo "   Downloaded"
         else
-            exit 1
+            echo "   ⚠️  Download failed. Building without Sparkle."
+            echo "   To retry: rm -rf vendor/ && ./build.sh"
+            NO_SPARKLE=1
         fi
-    fi
 
-    if [ -z "$NO_SPARKLE" ]; then
-        mkdir -p "$SPARKLE_DIR"
-        tar -xf "$TEMP_TAR" -C "$SPARKLE_DIR"
-        rm -f "$TEMP_TAR"
+        if [ "$NO_SPARKLE" -eq 0 ]; then
+            mkdir -p "$SPARKLE_DIR"
+            tar -xf "$TEMP_TAR" -C "$SPARKLE_DIR"
+            rm -f "$TEMP_TAR"
 
-        if [ ! -d "$SPARKLE_FRAMEWORK" ]; then
-            # Some Sparkle releases nest the framework
-            FOUND=$(find "$SPARKLE_DIR" -name "Sparkle.framework" -type d -maxdepth 3 | head -1)
-            if [ -n "$FOUND" ]; then
-                mv "$FOUND" "$SPARKLE_FRAMEWORK"
-            else
-                echo "   ❌ Sparkle.framework not found in archive"
-                exit 1
+            if [ ! -d "$SPARKLE_FRAMEWORK" ]; then
+                FOUND=$(find "$SPARKLE_DIR" -name "Sparkle.framework" -type d -maxdepth 3 | head -1)
+                if [ -n "$FOUND" ]; then
+                    mv "$FOUND" "$SPARKLE_FRAMEWORK"
+                else
+                    echo "   ❌ Sparkle.framework not found in archive. Continuing without."
+                    NO_SPARKLE=1
+                fi
+            fi
+
+            if [ "$NO_SPARKLE" -eq 0 ]; then
+                echo "   ✅ Sparkle ${SPARKLE_VERSION} ready"
             fi
         fi
-        echo "   ✅ Sparkle ${SPARKLE_VERSION} ready"
     fi
+else
+    echo "⏭️  Step 1: Skipping Sparkle (--no-sparkle)"
 fi
 
 # ==========================================
@@ -159,8 +156,7 @@ SWIFT_FLAGS=(
     -framework Carbon
 )
 
-# Add Sparkle linking if available
-if [ -d "$SPARKLE_FRAMEWORK" ] && [ -z "$NO_SPARKLE" ]; then
+if [ "$NO_SPARKLE" -eq 0 ] && [ -d "$SPARKLE_FRAMEWORK" ]; then
     SWIFT_FLAGS+=(
         -F "${VENDOR_DIR}/Sparkle"
         -framework Sparkle
@@ -168,9 +164,8 @@ if [ -d "$SPARKLE_FRAMEWORK" ] && [ -z "$NO_SPARKLE" ]; then
     )
     echo "   Linking with Sparkle ✓"
 else
-    # Compile with SPARKLE_DISABLED flag so the code skips Sparkle imports
     SWIFT_FLAGS+=(-D NO_SPARKLE)
-    echo "   Building WITHOUT Sparkle"
+    echo "   Building without Sparkle"
 fi
 
 swiftc \
@@ -189,29 +184,22 @@ echo "📁 Step 4: Packaging app bundle..."
 cp Info.plist "${CONTENTS}/Info.plist"
 chmod +x "${MACOS}/${APP_NAME}"
 
-# Embed Sparkle framework
-if [ -d "$SPARKLE_FRAMEWORK" ] && [ -z "$NO_SPARKLE" ]; then
+# Embed Sparkle framework if available
+if [ "$NO_SPARKLE" -eq 0 ] && [ -d "$SPARKLE_FRAMEWORK" ]; then
     cp -R "$SPARKLE_FRAMEWORK" "${FRAMEWORKS}/"
-
-    # Also copy the XPC services that Sparkle 2.x needs
-    INSTALLER_XPC="${VENDOR_DIR}/Sparkle/Sparkle.framework/Versions/B/XPCServices/Installer.xpc"
-    DOWNLOADER_XPC="${VENDOR_DIR}/Sparkle/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc"
-
-    # Sparkle 2.x bundles XPC services inside the framework — they're already
-    # included by the cp -R above. Verify:
-    if [ -d "${FRAMEWORKS}/Sparkle.framework" ]; then
-        echo "   Sparkle.framework embedded ✓"
-    fi
+    echo "   Sparkle.framework embedded ✓"
 fi
 
 echo "   ✅ ${APP_BUNDLE}"
 
 # ==========================================
-# Done
+# Read version from Info.plist
 # ==========================================
+VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "${CONTENTS}/Info.plist" 2>/dev/null || echo "unknown")
+
 echo ""
 echo "========================================"
-echo "  ✅ Build successful!"
+echo "  ✅ Build successful! (v${VERSION})"
 echo "========================================"
 echo ""
 echo "  Install:"
@@ -220,10 +208,6 @@ echo ""
 echo "  Run:"
 echo "    open /Applications/${APP_NAME}.app"
 echo ""
-echo "  Create DMG for distribution:"
+echo "  Create DMG:"
 echo "    ./package_dmg.sh"
-echo ""
-echo "  First-time release setup:"
-echo "    See RELEASING.md for Sparkle key generation"
-echo "    and appcast publishing instructions."
 echo ""
