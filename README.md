@@ -9,6 +9,18 @@
 
 ---
 
+## ⬇️ Download
+
+**[Download Mac Gesture v2.2 (DMG)](https://github.com/is-harshul/mac-gesture/releases/latest/download/MacGesture-2.2.dmg)**
+
+> Open the DMG → drag **MacGesture.app** into **Applications** → launch → grant Accessibility permission → done.
+>
+> If macOS shows an "unidentified developer" warning: **right-click the app → Open → Open**.
+
+Or via the [Releases page](https://github.com/is-harshul/mac-gesture/releases) for all versions.
+
+---
+
 Mac Gesture is a lightweight macOS menu bar utility that maps a **4-finger trackpad tap** to any configurable action — a middle click, a keyboard shortcut, or a system command. It uses intelligent duration + movement filtering to cleanly separate intentional taps from swipes, pinches, and other macOS gestures, so all your existing trackpad gestures continue working perfectly.
 
 ---
