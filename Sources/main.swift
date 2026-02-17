@@ -215,8 +215,8 @@ struct GestureConfig {
     var prefKey: String { return "action_\(fingerCount)finger" }
 }
 
-var gesture3 = GestureConfig(fingerCount: 3, action: .none)
-var gesture4 = GestureConfig(fingerCount: 4, action: .middleClick)
+var gesture3 = GestureConfig(fingerCount: 3, action: .middleClick)
+var gesture4 = GestureConfig(fingerCount: 4, action: .none)
 var gesture5 = GestureConfig(fingerCount: 5, action: .none)
 
 func gestureConfig(for fingerCount: Int) -> GestureConfig? {
@@ -469,12 +469,13 @@ func openAccessibilitySettings() {
 // ============================================================================
 
 class GesturePopoverVC: NSViewController {
-    let W: CGFloat = 290
-    let pad: CGFloat = 18       // horizontal padding
+    let W: CGFloat = 300
+    let padH: CGFloat = 24      // horizontal padding (left & right)
+    let padV: CGFloat = 20      // vertical padding (top & bottom)
     var tabControl: NSSegmentedControl!
     var actionContainer: NSView!
     var actionButtons: [NSButton] = []
-    var selectedTab = 1  // 0=3F, 1=4F, 2=5F
+    var selectedTab = 0  // 0=3F, 1=4F, 2=5F — default to 3F (primary default gesture)
 
     weak var appDelegate: AppDelegate?
 
@@ -488,13 +489,13 @@ class GesturePopoverVC: NSViewController {
         view.subviews.forEach { $0.removeFromSuperview() }
         actionButtons.removeAll()
 
-        let innerW = W - pad * 2
-        var y: CGFloat = 14
+        let innerW = W - padH * 2
+        var y: CGFloat = padV
 
         // ── QUIT + VERSION ──
         let quitBtn = makeLink("Quit MacGesture", action: #selector(appDelegate?.doQuit), color: .systemRed)
         quitBtn.target = appDelegate
-        quitBtn.frame.origin = CGPoint(x: pad, y: y)
+        quitBtn.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(quitBtn)
 
         let versionStr = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "3.1"
@@ -502,7 +503,7 @@ class GesturePopoverVC: NSViewController {
         vLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         vLabel.textColor = .tertiaryLabelColor
         vLabel.sizeToFit()
-        vLabel.frame.origin = CGPoint(x: W - pad - vLabel.frame.width, y: y + 1)
+        vLabel.frame.origin = CGPoint(x: W - padH - vLabel.frame.width, y: y + 1)
         view.addSubview(vLabel)
         y += 30
 
@@ -511,19 +512,19 @@ class GesturePopoverVC: NSViewController {
         // ── TOOLS ──
         let debugBtn = makeCheckbox("Debug Logging", checked: debugMode, action: #selector(appDelegate?.toggleDebug))
         debugBtn.target = appDelegate
-        debugBtn.frame.origin = CGPoint(x: pad, y: y)
+        debugBtn.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(debugBtn)
         y += 26
 
         let restartBtn = makeLink("Restart Touch Detection", action: #selector(appDelegate?.doRestart))
         restartBtn.target = appDelegate
-        restartBtn.frame.origin = CGPoint(x: pad, y: y)
+        restartBtn.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(restartBtn)
         y += 26
 
         let testBtn = makeLink("Test Current Tab Action (2s)", action: #selector(doTest))
         testBtn.target = self
-        testBtn.frame.origin = CGPoint(x: pad, y: y)
+        testBtn.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(testBtn)
         y += 30
 
@@ -534,7 +535,7 @@ class GesturePopoverVC: NSViewController {
 
         // Movement tolerance
         label("Movement Tolerance", at: &y)
-        let movPopup = NSPopUpButton(frame: NSRect(x: pad, y: y, width: innerW, height: 24), pullsDown: false)
+        let movPopup = NSPopUpButton(frame: NSRect(x: padH, y: y, width: innerW, height: 24), pullsDown: false)
         movPopup.font = .systemFont(ofSize: 11); movPopup.controlSize = .small
         let tolerances: [(String, Float)] = [
             ("Strict (1.5mm)", 0.015), ("Default (3mm)", 0.03),
@@ -551,7 +552,7 @@ class GesturePopoverVC: NSViewController {
 
         // Tap duration
         label("Tap Duration (max)", at: &y)
-        let durPopup = NSPopUpButton(frame: NSRect(x: pad, y: y, width: innerW, height: 24), pullsDown: false)
+        let durPopup = NSPopUpButton(frame: NSRect(x: padH, y: y, width: innerW, height: 24), pullsDown: false)
         durPopup.font = .systemFont(ofSize: 11); durPopup.controlSize = .small
         let durations: [(String, TimeInterval)] = [
             ("80ms (very fast)", 0.08), ("100ms (fast)", 0.10),
@@ -583,7 +584,9 @@ class GesturePopoverVC: NSViewController {
                                          target: self, action: #selector(tabChanged))
         tabControl.selectedSegment = selectedTab
         tabControl.segmentStyle = .texturedRounded
-        tabControl.frame = NSRect(x: pad, y: y, width: innerW, height: 26)
+        tabControl.frame = NSRect(x: padH, y: y, width: innerW, height: 26)
+        let segmentWidth = innerW / 3
+        for i in 0..<3 { tabControl.setWidth(segmentWidth, forSegment: i) }
         view.addSubview(tabControl)
         updateTabAppearance()
         y += 36
@@ -594,7 +597,7 @@ class GesturePopoverVC: NSViewController {
         let enableBtn = makeCheckbox("Enabled", checked: isEnabled, action: #selector(appDelegate?.toggleEnabled))
         enableBtn.target = appDelegate
         enableBtn.font = .systemFont(ofSize: 12, weight: .medium)
-        enableBtn.frame.origin = CGPoint(x: pad, y: y)
+        enableBtn.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(enableBtn)
         y += 30
 
@@ -602,7 +605,7 @@ class GesturePopoverVC: NSViewController {
 
         // ── ACCESSIBILITY STATUS ──
         let granted = isAccessibilityGranted()
-        let accessBg = NSView(frame: NSRect(x: pad, y: y, width: innerW, height: 28))
+        let accessBg = NSView(frame: NSRect(x: padH, y: y, width: innerW, height: 28))
         accessBg.wantsLayer = true
         accessBg.layer?.cornerRadius = 6
         accessBg.layer?.backgroundColor = granted
@@ -615,7 +618,7 @@ class GesturePopoverVC: NSViewController {
         dotLabel.font = .systemFont(ofSize: 10)
         dotLabel.textColor = dotColor
         dotLabel.sizeToFit()
-        dotLabel.frame.origin = CGPoint(x: pad + 8, y: y + 7)
+        dotLabel.frame.origin = CGPoint(x: padH + 8, y: y + 7)
         view.addSubview(dotLabel)
 
         let statusText = granted ? "Accessibility: Granted" : "Accessibility: Not Granted"
@@ -623,7 +626,7 @@ class GesturePopoverVC: NSViewController {
         statusLabel.font = .systemFont(ofSize: 11, weight: .medium)
         statusLabel.textColor = granted ? .systemGreen : .systemOrange
         statusLabel.sizeToFit()
-        statusLabel.frame.origin = CGPoint(x: pad + 22, y: y + 6)
+        statusLabel.frame.origin = CGPoint(x: padH + 22, y: y + 6)
         view.addSubview(statusLabel)
 
         if !granted {
@@ -631,7 +634,7 @@ class GesturePopoverVC: NSViewController {
             grantBtn.target = self
             grantBtn.font = .systemFont(ofSize: 11, weight: .medium)
             grantBtn.sizeToFit()
-            grantBtn.frame.origin = CGPoint(x: W - pad - grantBtn.frame.width - 6, y: y + 5)
+            grantBtn.frame.origin = CGPoint(x: W - padH - grantBtn.frame.width - 6, y: y + 5)
             view.addSubview(grantBtn)
         }
         y += 36
@@ -641,7 +644,7 @@ class GesturePopoverVC: NSViewController {
         header.font = .boldSystemFont(ofSize: 15)
         header.textColor = .labelColor
         header.sizeToFit()
-        header.frame.origin = CGPoint(x: pad, y: y)
+        header.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(header)
 
         let summaryText = gesturesSummaryShort()
@@ -649,9 +652,9 @@ class GesturePopoverVC: NSViewController {
         summary.font = .systemFont(ofSize: 9)
         summary.textColor = .tertiaryLabelColor
         summary.sizeToFit()
-        summary.frame.origin = CGPoint(x: W - pad - summary.frame.width, y: y + 4)
+        summary.frame.origin = CGPoint(x: W - padH - summary.frame.width, y: y + 4)
         view.addSubview(summary)
-        y += 28
+        y += 28 + padV
 
         // Final
         view.frame = NSRect(x: 0, y: 0, width: W, height: y)
@@ -666,7 +669,7 @@ class GesturePopoverVC: NSViewController {
 
         // Disabled option
         let offBtn = makeRadio("Disabled (Off)", selected: gesture.action == .none, tag: -1)
-        offBtn.frame.origin = CGPoint(x: pad + 4, y: y)
+        offBtn.frame.origin = CGPoint(x: padH + 4, y: y)
         actionContainer.addSubview(offBtn)
         actionButtons.append(offBtn)
         y += 22
@@ -679,14 +682,14 @@ class GesturePopoverVC: NSViewController {
             catLabel.font = .systemFont(ofSize: 9, weight: .semibold)
             catLabel.textColor = .tertiaryLabelColor
             catLabel.sizeToFit()
-            catLabel.frame.origin = CGPoint(x: pad + 4, y: y + 3)
+            catLabel.frame.origin = CGPoint(x: padH + 4, y: y + 3)
             actionContainer.addSubview(catLabel)
             y += 18
 
             for act in actions {
                 let tag = TapAction.allCases.firstIndex(of: act) ?? 0
                 let btn = makeRadio(act.displayName, selected: act == gesture.action, tag: tag)
-                btn.frame.origin = CGPoint(x: pad + 16, y: y)
+                btn.frame.origin = CGPoint(x: padH + 16, y: y)
                 actionContainer.addSubview(btn)
                 actionButtons.append(btn)
                 y += 22
@@ -725,7 +728,9 @@ class GesturePopoverVC: NSViewController {
 
     @objc func tabChanged() {
         selectedTab = tabControl.selectedSegment
-        rebuildUI()
+        // Only rebuild action list and tab labels — avoids full UI rebuild and layout shift
+        buildActionList()
+        updateTabAppearance()
     }
 
     @objc func actionSelected(_ sender: NSButton) {
@@ -810,7 +815,7 @@ class GesturePopoverVC: NSViewController {
     }
 
     func sep(_ y: inout CGFloat) {
-        let s = NSBox(frame: NSRect(x: pad, y: y, width: W - pad * 2, height: 1))
+        let s = NSBox(frame: NSRect(x: padH, y: y, width: W - padH * 2, height: 1))
         s.boxType = .separator
         view.addSubview(s)
         y += 12
@@ -821,7 +826,7 @@ class GesturePopoverVC: NSViewController {
         l.font = .systemFont(ofSize: 10, weight: .semibold)
         l.textColor = .tertiaryLabelColor
         l.sizeToFit()
-        l.frame.origin = CGPoint(x: pad, y: y)
+        l.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(l)
         y += 20
     }
@@ -831,7 +836,7 @@ class GesturePopoverVC: NSViewController {
         l.font = .systemFont(ofSize: 11)
         l.textColor = .secondaryLabelColor
         l.sizeToFit()
-        l.frame.origin = CGPoint(x: pad, y: y)
+        l.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(l)
         y += 18
     }

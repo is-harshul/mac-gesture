@@ -38,8 +38,8 @@ All your existing swipe, pinch, and drag gestures continue working — Mac Gestu
 
 | Gesture | Default Action | Customizable? |
 |---|---|---|
-| **3-finger tap** | Off | ✅ Yes |
-| **4-finger tap** | Middle Click | ✅ Yes |
+| **3-finger tap** | Middle Click | ✅ Yes |
+| **4-finger tap** | Off | ✅ Yes |
 | **5-finger tap** | Off | ✅ Yes |
 
 ### Available Actions
@@ -111,11 +111,13 @@ On first launch, grant Accessibility access:
 
 Click the trackpad icon in the menu bar. You'll see three independently configurable gesture sections:
 
+![MacGesture Popover](screenshot.png)
+
 ```
 ┌─────────────────────────────┐
 │ MacGesture                  │
-│   3F → Off                  │
-│   4F → Middle Click         │
+│   3F → Middle Click         │
+│   4F → Off                  │
 │   5F → Off                  │
 ├─────────────────────────────┤
 │ ☑ Enabled                   │
