@@ -105,6 +105,16 @@ chmod +x "${MACOS}/${APP_NAME}"
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "${CONTENTS}/Info.plist" 2>/dev/null || echo "unknown")
 
 echo "   ✅ ${APP_BUNDLE}"
+
+# ==========================================
+# Step 4: Ad-hoc Code Sign
+# ==========================================
+echo ""
+echo "🔏 Step 4: Ad-hoc code signing..."
+
+codesign --force --deep --sign - "${APP_BUNDLE}" 2>/dev/null && \
+    echo "   ✅ Signed (ad-hoc)" || \
+    echo "   ⚠️  Signing skipped (codesign not available)"
 echo ""
 echo "========================================"
 echo "  ✅ Build successful! (v${VERSION})"

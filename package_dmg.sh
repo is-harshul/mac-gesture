@@ -40,24 +40,27 @@ ln -s /Applications "$DMG_DIR/Applications"
 
 # Create a README in the DMG
 cat > "$DMG_DIR/READ ME FIRST.txt" << 'EOF'
-MacGesture
-=============
+MacGesture — Installation
+=========================
 
-Installation:
-  Drag MacGesture.app into the Applications folder.
+1. Drag MacGesture.app into the Applications folder →
 
-First Launch:
-  1. Open MacGesture from Applications
-  2. Grant Accessibility permission when prompted
-     (System Settings → Privacy & Security → Accessibility)
-  3. Done! Tap the trackpad with 4 fingers to trigger your action.
+2. IMPORTANT — Before first launch, open Terminal and run:
 
-Configure:
-  Click the icon in the menu bar to change the action,
-  tap duration, and movement tolerance.
+   xattr -cr /Applications/MacGesture.app
 
-Note: If macOS says the app is from an "unidentified developer",
-right-click the app → Open → Open to bypass Gatekeeper.
+   This removes the macOS quarantine flag. Without this step,
+   macOS will block the app because it is not code-signed.
+
+3. Open MacGesture from Applications.
+
+4. Grant Accessibility permission when prompted:
+   System Settings → Privacy & Security → Accessibility → MacGesture ON
+
+5. Done! Tap the trackpad with 3, 4, or 5 fingers.
+
+Tip: After each rebuild/update, you may need to re-run the xattr
+command and toggle Accessibility permission OFF → ON in System Settings.
 EOF
 
 # Create DMG

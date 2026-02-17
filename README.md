@@ -14,11 +14,17 @@
 
 **[Download Latest Release (DMG)](https://github.com/is-harshul/mac-gesture/releases/latest)**
 
-> Open the DMG → drag **MacGesture.app** into **Applications** → launch → grant Accessibility permission → done.
->
-> If macOS shows an "unidentified developer" warning: **right-click the app → Open → Open**.
+### First-time setup after download:
 
-A new DMG is built and published automatically on every push to `main`.
+1. Open the DMG → drag **MacGesture.app** into **Applications**
+2. **Remove the quarantine flag** (required because the app is not notarized):
+   ```bash
+   xattr -cr /Applications/MacGesture.app
+   ```
+3. Open MacGesture → grant **Accessibility** permission when prompted
+4. Tap your trackpad!
+
+> Without the `xattr` step, macOS will show "the app is damaged" — this is normal for unsigned apps downloaded from the internet. You only need to do this once per version.
 
 ---
 
@@ -231,8 +237,15 @@ Enable **Debug Logging** from the menu:
 
 ## Troubleshooting
 
+### "The app is damaged and can't be opened" / "modified or damaged"
+This is macOS quarantine — run this in Terminal, then try again:
+```bash
+xattr -cr /Applications/MacGesture.app
+```
+
 ### Taps aren't detected
 - Verify **Accessibility permission** is on
+- **After updates/rebuilds:** toggle Accessibility OFF → ON for MacGesture (binary hash changes, macOS revokes the old grant)
 - Run from Terminal, check for `✅ Device 0: started`
 - Use **Restart Touch Detection** from the menu
 
