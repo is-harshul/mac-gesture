@@ -1,6 +1,6 @@
 # <img src="icon.svg" width="28" height="28" alt="icon" /> Mac Gesture
 
-**Custom trackpad gestures for macOS — map 3, 4, and 5-finger taps to any action.**
+**Custom multi-finger trackpad gestures for macOS.**
 
 ![macOS 12+](https://img.shields.io/badge/macOS-12%2B-black?logo=apple&logoColor=white)
 ![Swift](https://img.shields.io/badge/Swift-5.7+-F05138?logo=swift&logoColor=white)
@@ -22,49 +22,59 @@ A new DMG is built and published automatically on every push to `main`.
 
 ---
 
-## The Problem
+## What It Does
 
-Mac trackpads are incredible hardware with terrible gesture support. You can't middle-click, you can't map multi-finger taps to custom actions, and Apple gives you no way to fix this.
+Mac Gesture maps **3-finger, 4-finger, and 5-finger trackpad taps** to configurable actions — each independently. Tap with 4 fingers to middle-click a link, 3 fingers to copy, 5 fingers to launch Spotlight. Or any combination you want.
 
-Mac Gesture lets you assign **any action** to a **3-finger tap**, **4-finger tap**, or **5-finger tap** — independently configurable, with smart tap detection that doesn't interfere with your existing swipe/pinch gestures.
+All your existing swipe, pinch, and drag gestures continue working — Mac Gesture only triggers on quick taps, not holds or swipes.
 
----
+### Default Configuration
 
-## How It Works
-
-| Gesture | Default | Configurable? |
+| Gesture | Default Action | Customizable? |
 |---|---|---|
-| 3-finger tap | Disabled | ✅ |
-| 4-finger tap | Middle Click | ✅ |
-| 5-finger tap | Disabled | ✅ |
-| 3/4/5-finger swipe | Passes through to macOS | — |
-| 3/4/5-finger pinch | Passes through to macOS | — |
+| **3-finger tap** | Off | ✅ Yes |
+| **4-finger tap** | Middle Click | ✅ Yes |
+| **5-finger tap** | Off | ✅ Yes |
 
-Mac Gesture distinguishes taps from other gestures using duration (≤120ms default) and movement (≤3mm default) filters. Your existing macOS swipe, pinch, and drag gestures are completely unaffected.
+### Available Actions
 
----
-
-## Available Actions
-
-Each finger count can be independently assigned to any of these:
+Each gesture can be mapped to any of these:
 
 | Category | Actions |
 |---|---|
-| **Off** | Disabled |
 | **Mouse** | Middle Click · Right Click |
 | **Browser** | Close Tab `⌘W` · New Tab `⌘T` · Reopen Closed Tab `⇧⌘T` · Refresh `⌘R` |
 | **Edit** | Copy `⌘C` · Paste `⌘V` · Undo `⌘Z` |
 | **System** | Mission Control · Launchpad · Spotlight `⌘Space` |
+| **Off** | Disabled (gesture passes through to macOS) |
 
-**Example setup:** 3-finger tap → Copy, 4-finger tap → Middle Click, 5-finger tap → Mission Control.
+### Tap vs Swipe Detection
+
+Mac Gesture distinguishes taps from swipes/pinches using two filters:
+
+| Check | What it does | Default |
+|---|---|---|
+| **Duration** | Rejects anything held too long | ≤ 120ms |
+| **Movement** | Rejects if fingers drift | ≤ 3mm |
+
+Real taps are 30–100ms with almost no movement. Swipes are 200ms+. The combination catches all taps and rejects everything else.
+
+| Gesture | Result |
+|---|---|
+| Quick 3/4/5-finger tap | ✅ Fires the configured action |
+| Multi-finger swipe | ❌ Ignored — passes through to macOS |
+| Multi-finger pinch | ❌ Ignored — passes through to macOS |
+| Long press | ❌ Ignored (exceeds tap duration) |
 
 ---
 
 ## Installation
 
-### Download
+### Download (Recommended)
 
-Grab the DMG from [Releases](https://github.com/is-harshul/mac-gesture/releases/latest), or build from source:
+Grab the DMG from the [latest release](https://github.com/is-harshul/mac-gesture/releases/latest), open it, and drag to Applications.
+
+### Build from Source
 
 ```bash
 git clone https://github.com/is-harshul/mac-gesture.git
@@ -75,89 +85,124 @@ cp -r build/MacGesture.app /Applications/
 open /Applications/MacGesture.app
 ```
 
-### Grant Accessibility Permission
+**Requirements:** macOS 12+, Xcode Command Line Tools (`xcode-select --install`). Optional: `brew install librsvg` for icon generation.
 
-On first launch:
+### Accessibility Permission
 
-1. Click **"Open System Settings"** when prompted
-2. Toggle **MacGesture** to **ON** in **System Settings → Privacy & Security → Accessibility**
+On first launch, grant Accessibility access:
 
-> The app uses `CGEvent` to simulate mouse/keyboard events. It has zero network access and collects no data.
+**System Settings → Privacy & Security → Accessibility → toggle MacGesture ON**
+
+> Mac Gesture uses `CGEvent` to simulate mouse/keyboard events. It has zero network access and never collects any data.
 
 ### Start at Login
 
-`System Settings → General → Login Items → + → select MacGesture`
+`System Settings → General → Login Items → + → MacGesture`
 
 ---
 
 ## Configuration
 
-Click the trackpad icon in the menu bar. The menu shows three gesture sections:
+Click the trackpad icon in the menu bar. You'll see three independently configurable gesture sections:
 
 ```
-MacGesture
-  3F → Disabled
-  4F → Middle Click
-─────────────────────
-✓ Enabled
-─────────────────────
-3-FINGER TAP  Off
-  ○ Disabled (Off)
-    Mouse
-  ○ Middle Click
-  ○ Right Click
-    Browser
-  ○ Close Tab  (⌘W)
-  ...
-─────────────────────
-4-FINGER TAP  Middle Click
-  ○ Disabled (Off)
-    Mouse
-  ● Middle Click
-  ...
-─────────────────────
-5-FINGER TAP  Off
-  ...
-─────────────────────
-Tap Duration (max) ▸
-Movement Tolerance ▸
+┌─────────────────────────────┐
+│ MacGesture                  │
+│   3F → Off                  │
+│   4F → Middle Click         │
+│   5F → Off                  │
+├─────────────────────────────┤
+│ ☑ Enabled                   │
+├─────────────────────────────┤
+│ 3-FINGER TAP  Off           │
+│   Disabled (Off)       ●    │
+│   Mouse                     │
+│     Middle Click             │
+│     Right Click              │
+│   Browser                   │
+│     Close Tab  (⌘W)         │
+│     ...                     │
+├─────────────────────────────┤
+│ 4-FINGER TAP  Middle Click  │
+│   ...                       │
+├─────────────────────────────┤
+│ 5-FINGER TAP  Off           │
+│   ...                       │
+├─────────────────────────────┤
+│ Tap Duration (max)     ▸    │
+│ Movement Tolerance     ▸    │
+├─────────────────────────────┤
+│ Test 4-Finger Action (2s)   │
+│ Restart Touch Detection     │
+│ Debug Logging               │
+├─────────────────────────────┤
+│ Version 3.0                 │
+│ Quit MacGesture             │
+└─────────────────────────────┘
 ```
 
-### Tap Duration
+### Tap Duration & Movement Tolerance
 
-| Setting | Value | Notes |
-|---|---|---|
-| Very fast | 80ms | Strict |
-| **Default** | **120ms** | **Most users** |
-| Relaxed | 200ms | More forgiving |
-| Very generous | 350ms | Maximum tolerance |
+These settings are shared across all gesture types (3/4/5 finger):
 
-### Movement Tolerance
+**Tap Duration** — max time fingers can be on the trackpad:
+
+| Setting | Value |
+|---|---|
+| Very fast | 80ms |
+| Fast | 100ms |
+| **Default** | **120ms** |
+| Comfortable | 150ms |
+| Relaxed | 200ms |
+| Generous | 250ms |
+| Very generous | 350ms |
+
+**Movement Tolerance** — max finger drift allowed:
 
 | Setting | Value |
 |---|---|
 | Strict | ~1.5mm |
 | **Default** | **~3mm** |
 | Loose | ~5mm |
+| Very Loose | ~8mm |
 | Disabled | No check |
 
-Settings apply to all gesture types and persist across restarts.
+All preferences persist across restarts.
 
 ---
 
-## Tap Detection
+## How It Works
 
-The gesture recognizer uses peak finger count to avoid ghost triggers:
+### Touch Detection
 
-1. **3+ fingers land** → start tracking time and finger centroid
-2. **While fingers are down** → track peak finger count and centroid drift
-3. **All fingers lift** → evaluate based on peak count:
-   - Duration between 20ms and threshold? ✓
-   - Centroid movement below tolerance? ✓
-   - Peak finger count has a configured action? ✓
-   - All three pass → fire the action
+Mac Gesture loads Apple's private `MultitouchSupport.framework` via `dlopen`. This provides raw touch data at ~60–100 fps, before macOS processes it into system gestures.
 
-By evaluating only when **all fingers lift** (count == 0), a 5-finger tap can't accidentally trigger the 4-finger or 3-finger action on the way down.
+### Gesture Algorithm
+
+```
+When 3+ fingers land:
+  → Record start time, finger count, centroid position
+  → Track peak finger count + centroid drift each frame
+
+When all fingers lift:
+  → Determine gesture type from peak finger count (3, 4, or 5)
+  → Look up the action for that finger count
+
+  ✅ Fire action if ALL:
+     • duration > 20ms             (not phantom)
+     • duration < threshold         (default 120ms)
+     • peak fingers == exactly 3/4/5 (no "passing through" counts)
+     • centroid drift < tolerance    (default 3mm)
+     • an action is configured for that finger count
+
+  ❌ Reject otherwise → gesture passes through to macOS
+```
+
+### Why It Doesn't Conflict with macOS Gestures
+
+System gestures (swipes, pinches, Mission Control) all involve sustained finger movement over 200ms+. Mac Gesture only fires on sub-120ms taps with <3mm drift. The two never overlap.
+
+For 3-finger gestures specifically: if you use 3-finger drag in macOS, it involves holding fingers down and moving — which exceeds both the duration and movement thresholds. Quick 3-finger taps are distinct from drags.
 
 ---
 
@@ -174,30 +219,46 @@ Enable **Debug Logging** from the menu:
 ✅ 4-FINGER TAP! 67ms, moved 0.0042 → Middle Click
 🖱️ Middle-click at (834, 502)
 
-👆 3-finger touch started at (0.320, 0.610)
-❌ Rejected 3F: 45ms, moved 0.0012 — 3F not configured
+👆 3-finger touch started at (0.320, 0.410)
+✅ 3-FINGER TAP! 54ms, moved 0.0018 → Copy  (⌘C)
+⌨️ Key combo executed
 
 👆 5-finger touch started at (0.500, 0.500)
-❌ Rejected 5F: 312ms, moved 0.1820 — duration(312ms), movement(0.1820)
+❌ Rejected 5F: 245ms, moved 0.0031 — duration(245ms)
 ```
 
 ---
 
 ## Troubleshooting
 
-**Taps not detected** — Check Accessibility permission. Run from Terminal to see device detection logs.
+### Taps aren't detected
+- Verify **Accessibility permission** is on
+- Run from Terminal, check for `✅ Device 0: started`
+- Use **Restart Touch Detection** from the menu
 
-**Taps inconsistent** — Increase Tap Duration to 150–200ms and/or Movement Tolerance to 5mm.
+### 3-finger tap conflicts with 3-finger drag
+- Make sure you're doing a quick tap (< 120ms), not a press-and-hold
+- If needed, increase **Tap Duration** to give yourself more time
+- Or disable 3-finger tap and use only 4/5-finger gestures
 
-**Swipes triggering actions** — Decrease Tap Duration to 80–100ms and/or Movement Tolerance to 1.5mm.
+### Swipes also trigger
+- Decrease **Tap Duration** to 80–100ms
+- Decrease **Movement Tolerance** to Strict (1.5mm)
 
-**3-finger tap interferes with macOS drag** — If you use 3-finger drag (System Settings → Accessibility → Pointer Control → Trackpad Options), the 3-finger gesture may conflict. Either disable 3-finger tap in Mac Gesture or switch macOS to use a different drag method.
+### Some finger counts work but not others
+- Check the menu — each gesture is configured independently
+- A gesture set to "Disabled (Off)" won't fire
 
 ---
 
 ## CI/CD
 
-Every push to `main` triggers a [GitHub Actions workflow](.github/workflows/release.yml) that builds the app, creates a DMG, and publishes a GitHub Release. To ship a new version: bump the version in `Info.plist` and push.
+Every push to `main` triggers [GitHub Actions](.github/workflows/release.yml):
+
+1. Runs `./release.sh` (build + DMG)
+2. Creates/updates a GitHub Release with the DMG
+
+To publish a new version: bump version in `Info.plist`, push to `main`.
 
 ---
 
@@ -205,27 +266,35 @@ Every push to `main` triggers a [GitHub Actions workflow](.github/workflows/rele
 
 ```
 mac-gesture/
-├── .github/workflows/release.yml   # CI: build + release on push to main
+├── .github/workflows/release.yml   # CI: auto-release on push
 ├── Sources/main.swift               # Complete app (~760 lines)
 ├── Info.plist                       # Bundle metadata + version
 ├── icon.svg                         # App icon
-├── build.sh                         # Compile + icon + .app bundle
-├── release.sh                       # build.sh + DMG
+├── build.sh                         # Compile + bundle
+├── release.sh                       # Build + DMG
 ├── package_dmg.sh                   # DMG packaging
 ├── generate_icon.sh                 # SVG → .icns
-├── DISTRIBUTION.md                  # Notarization & Homebrew guide
+├── DISTRIBUTION.md                  # Notarization guide
 ├── LICENSE
 ├── .gitignore
 └── README.md
 ```
 
-Single Swift file. No Xcode project. No package manager. No external dependencies.
+Single Swift file. No Xcode project. No dependencies.
 
 ---
 
 ## Contributing
 
-Ideas: more actions (screenshot, DnD toggle, volume mute, lock screen), configurable finger counts beyond 3–5, double-tap detection, SwiftUI settings window.
+Ideas:
+
+- **More actions** — screenshot, do not disturb, volume mute, lock screen
+- **Double-tap** — two quick taps for a different action
+- **Per-gesture duration/movement** — separate thresholds for 3/4/5-finger taps
+- **SwiftUI settings window**
+- **Custom keyboard shortcut** — let users define any key combo
+
+---
 
 ## License
 

@@ -446,29 +446,440 @@ func createMenuBarIcon(enabled: Bool) -> NSImage {
 }
 
 // ============================================================================
+// MARK: - Accessibility Helper
+// ============================================================================
+
+/// Check accessibility WITHOUT prompting (for UI status display)
+func isAccessibilityGranted() -> Bool {
+    return AXIsProcessTrusted()
+}
+
+/// Check accessibility WITH prompt (for first launch)
+func checkAccessibilityWithPrompt() -> Bool {
+    let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
+    return AXIsProcessTrustedWithOptions(opts)
+}
+
+func openAccessibilitySettings() {
+    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+}
+
+// ============================================================================
+// MARK: - Popover Content ViewController
+// ============================================================================
+
+class GesturePopoverVC: NSViewController {
+    let W: CGFloat = 290
+    let pad: CGFloat = 18       // horizontal padding
+    var tabControl: NSSegmentedControl!
+    var actionContainer: NSView!
+    var actionButtons: [NSButton] = []
+    var selectedTab = 1  // 0=3F, 1=4F, 2=5F
+
+    weak var appDelegate: AppDelegate?
+
+    override func loadView() {
+        view = NSView(frame: NSRect(x: 0, y: 0, width: W, height: 100))
+        view.wantsLayer = true
+        rebuildUI()
+    }
+
+    func rebuildUI() {
+        view.subviews.forEach { $0.removeFromSuperview() }
+        actionButtons.removeAll()
+
+        let innerW = W - pad * 2
+        var y: CGFloat = 14
+
+        // ── QUIT + VERSION ──
+        let quitBtn = makeLink("Quit MacGesture", action: #selector(appDelegate?.doQuit), color: .systemRed)
+        quitBtn.target = appDelegate
+        quitBtn.frame.origin = CGPoint(x: pad, y: y)
+        view.addSubview(quitBtn)
+
+        let versionStr = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "3.1"
+        let vLabel = NSTextField(labelWithString: "v\(versionStr)")
+        vLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        vLabel.textColor = .tertiaryLabelColor
+        vLabel.sizeToFit()
+        vLabel.frame.origin = CGPoint(x: W - pad - vLabel.frame.width, y: y + 1)
+        view.addSubview(vLabel)
+        y += 30
+
+        sep(&y)
+
+        // ── TOOLS ──
+        let debugBtn = makeCheckbox("Debug Logging", checked: debugMode, action: #selector(appDelegate?.toggleDebug))
+        debugBtn.target = appDelegate
+        debugBtn.frame.origin = CGPoint(x: pad, y: y)
+        view.addSubview(debugBtn)
+        y += 26
+
+        let restartBtn = makeLink("Restart Touch Detection", action: #selector(appDelegate?.doRestart))
+        restartBtn.target = appDelegate
+        restartBtn.frame.origin = CGPoint(x: pad, y: y)
+        view.addSubview(restartBtn)
+        y += 26
+
+        let testBtn = makeLink("Test Current Tab Action (2s)", action: #selector(doTest))
+        testBtn.target = self
+        testBtn.frame.origin = CGPoint(x: pad, y: y)
+        view.addSubview(testBtn)
+        y += 30
+
+        sep(&y)
+
+        // ── GENERAL SETTINGS ──
+        sectionHeader("GENERAL", at: &y)
+
+        // Movement tolerance
+        label("Movement Tolerance", at: &y)
+        let movPopup = NSPopUpButton(frame: NSRect(x: pad, y: y, width: innerW, height: 24), pullsDown: false)
+        movPopup.font = .systemFont(ofSize: 11); movPopup.controlSize = .small
+        let tolerances: [(String, Float)] = [
+            ("Strict (1.5mm)", 0.015), ("Default (3mm)", 0.03),
+            ("Loose (5mm)", 0.05), ("Very Loose (8mm)", 0.08), ("Disabled", 1.0)
+        ]
+        for (i, (lbl, val)) in tolerances.enumerated() {
+            movPopup.addItem(withTitle: lbl)
+            movPopup.item(at: i)?.representedObject = val
+            if abs(val - maxMovement) < 0.001 { movPopup.selectItem(at: i) }
+        }
+        movPopup.target = appDelegate; movPopup.action = #selector(appDelegate?.movementChanged(_:))
+        view.addSubview(movPopup)
+        y += 30
+
+        // Tap duration
+        label("Tap Duration (max)", at: &y)
+        let durPopup = NSPopUpButton(frame: NSRect(x: pad, y: y, width: innerW, height: 24), pullsDown: false)
+        durPopup.font = .systemFont(ofSize: 11); durPopup.controlSize = .small
+        let durations: [(String, TimeInterval)] = [
+            ("80ms (very fast)", 0.08), ("100ms (fast)", 0.10),
+            ("120ms (default)", 0.12), ("150ms (comfortable)", 0.15),
+            ("200ms (relaxed)", 0.20), ("250ms (generous)", 0.25),
+            ("350ms (very generous)", 0.35)
+        ]
+        for (i, (lbl, val)) in durations.enumerated() {
+            durPopup.addItem(withTitle: lbl)
+            durPopup.item(at: i)?.representedObject = val
+            if abs(val - tapThreshold) < 0.001 { durPopup.selectItem(at: i) }
+        }
+        durPopup.target = appDelegate; durPopup.action = #selector(appDelegate?.durationChanged(_:))
+        view.addSubview(durPopup)
+        y += 32
+
+        sep(&y)
+
+        // ── ACTION LIST (for selected tab) ──
+        actionContainer = NSView(frame: NSRect(x: 0, y: y, width: W, height: 0))
+        view.addSubview(actionContainer)
+        buildActionList()
+        y += actionContainer.frame.height
+
+        sep(&y)
+
+        // ── TAB CONTROL ──
+        tabControl = NSSegmentedControl(labels: ["3F", "4F", "5F"], trackingMode: .selectOne,
+                                         target: self, action: #selector(tabChanged))
+        tabControl.selectedSegment = selectedTab
+        tabControl.segmentStyle = .texturedRounded
+        tabControl.frame = NSRect(x: pad, y: y, width: innerW, height: 26)
+        view.addSubview(tabControl)
+        updateTabAppearance()
+        y += 36
+
+        sep(&y)
+
+        // ── ENABLED TOGGLE ──
+        let enableBtn = makeCheckbox("Enabled", checked: isEnabled, action: #selector(appDelegate?.toggleEnabled))
+        enableBtn.target = appDelegate
+        enableBtn.font = .systemFont(ofSize: 12, weight: .medium)
+        enableBtn.frame.origin = CGPoint(x: pad, y: y)
+        view.addSubview(enableBtn)
+        y += 30
+
+        sep(&y)
+
+        // ── ACCESSIBILITY STATUS ──
+        let granted = isAccessibilityGranted()
+        let accessBg = NSView(frame: NSRect(x: pad, y: y, width: innerW, height: 28))
+        accessBg.wantsLayer = true
+        accessBg.layer?.cornerRadius = 6
+        accessBg.layer?.backgroundColor = granted
+            ? NSColor.systemGreen.withAlphaComponent(0.12).cgColor
+            : NSColor.systemOrange.withAlphaComponent(0.12).cgColor
+        view.addSubview(accessBg)
+
+        let dotColor: NSColor = granted ? .systemGreen : .systemOrange
+        let dotLabel = NSTextField(labelWithString: "●")
+        dotLabel.font = .systemFont(ofSize: 10)
+        dotLabel.textColor = dotColor
+        dotLabel.sizeToFit()
+        dotLabel.frame.origin = CGPoint(x: pad + 8, y: y + 7)
+        view.addSubview(dotLabel)
+
+        let statusText = granted ? "Accessibility: Granted" : "Accessibility: Not Granted"
+        let statusLabel = NSTextField(labelWithString: statusText)
+        statusLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        statusLabel.textColor = granted ? .systemGreen : .systemOrange
+        statusLabel.sizeToFit()
+        statusLabel.frame.origin = CGPoint(x: pad + 22, y: y + 6)
+        view.addSubview(statusLabel)
+
+        if !granted {
+            let grantBtn = makeLink("Grant →", action: #selector(openAccessSettings), color: .systemOrange)
+            grantBtn.target = self
+            grantBtn.font = .systemFont(ofSize: 11, weight: .medium)
+            grantBtn.sizeToFit()
+            grantBtn.frame.origin = CGPoint(x: W - pad - grantBtn.frame.width - 6, y: y + 5)
+            view.addSubview(grantBtn)
+        }
+        y += 36
+
+        // ── HEADER ──
+        let header = NSTextField(labelWithString: "MacGesture")
+        header.font = .boldSystemFont(ofSize: 15)
+        header.textColor = .labelColor
+        header.sizeToFit()
+        header.frame.origin = CGPoint(x: pad, y: y)
+        view.addSubview(header)
+
+        let summaryText = gesturesSummaryShort()
+        let summary = NSTextField(labelWithString: summaryText)
+        summary.font = .systemFont(ofSize: 9)
+        summary.textColor = .tertiaryLabelColor
+        summary.sizeToFit()
+        summary.frame.origin = CGPoint(x: W - pad - summary.frame.width, y: y + 4)
+        view.addSubview(summary)
+        y += 28
+
+        // Final
+        view.frame = NSRect(x: 0, y: 0, width: W, height: y)
+    }
+
+    func buildActionList() {
+        actionContainer.subviews.forEach { $0.removeFromSuperview() }
+        actionButtons.removeAll()
+
+        let gesture = currentGesture()
+        var y: CGFloat = 6
+
+        // Disabled option
+        let offBtn = makeRadio("Disabled (Off)", selected: gesture.action == .none, tag: -1)
+        offBtn.frame.origin = CGPoint(x: pad + 4, y: y)
+        actionContainer.addSubview(offBtn)
+        actionButtons.append(offBtn)
+        y += 22
+
+        for category in ["Mouse", "Browser", "Edit", "System"] {
+            let actions = selectableActions.filter { $0.category == category }
+            if actions.isEmpty { continue }
+
+            let catLabel = NSTextField(labelWithString: category.uppercased())
+            catLabel.font = .systemFont(ofSize: 9, weight: .semibold)
+            catLabel.textColor = .tertiaryLabelColor
+            catLabel.sizeToFit()
+            catLabel.frame.origin = CGPoint(x: pad + 4, y: y + 3)
+            actionContainer.addSubview(catLabel)
+            y += 18
+
+            for act in actions {
+                let tag = TapAction.allCases.firstIndex(of: act) ?? 0
+                let btn = makeRadio(act.displayName, selected: act == gesture.action, tag: tag)
+                btn.frame.origin = CGPoint(x: pad + 16, y: y)
+                actionContainer.addSubview(btn)
+                actionButtons.append(btn)
+                y += 22
+            }
+            y += 4
+        }
+        y += 6
+        actionContainer.frame.size.height = y
+    }
+
+    func currentGesture() -> GestureConfig {
+        switch selectedTab {
+        case 0: return gesture3
+        case 2: return gesture5
+        default: return gesture4
+        }
+    }
+
+    func updateTabAppearance() {
+        let gestures = [gesture3, gesture4, gesture5]
+        for (i, g) in gestures.enumerated() {
+            let label = "\(g.fingerCount)F" + (g.action.isEnabled ? " ●" : "")
+            tabControl.setLabel(label, forSegment: i)
+        }
+    }
+
+    func gesturesSummaryShort() -> String {
+        var parts: [String] = []
+        if gesture3.action.isEnabled { parts.append("3F") }
+        if gesture4.action.isEnabled { parts.append("4F") }
+        if gesture5.action.isEnabled { parts.append("5F") }
+        return parts.isEmpty ? "none active" : parts.joined(separator: " · ") + " active"
+    }
+
+    // MARK: - Actions
+
+    @objc func tabChanged() {
+        selectedTab = tabControl.selectedSegment
+        rebuildUI()
+    }
+
+    @objc func actionSelected(_ sender: NSButton) {
+        let tag = sender.tag
+        let action: TapAction
+        if tag == -1 {
+            action = .none
+        } else {
+            let allCases = TapAction.allCases
+            guard tag >= 0 && tag < allCases.count else { return }
+            action = allCases[tag]
+        }
+
+        switch selectedTab {
+        case 0: gesture3.action = action
+        case 2: gesture5.action = action
+        default: gesture4.action = action
+        }
+
+        savePreferences()
+        appDelegate?.updateIcon()
+        print("🔧 \(currentGesture().fingerCount)-finger → \(action.displayName)")
+
+        let gesture = currentGesture()
+        for btn in actionButtons {
+            if btn.tag == -1 {
+                btn.state = gesture.action == .none ? .on : .off
+            } else {
+                let allCases = TapAction.allCases
+                if btn.tag < allCases.count {
+                    btn.state = allCases[btn.tag] == gesture.action ? .on : .off
+                }
+            }
+        }
+        updateTabAppearance()
+    }
+
+    @objc func doTest() {
+        let action = currentGesture().action
+        guard action.isEnabled else {
+            print("🧪 No action configured for \(currentGesture().fingerCount)-finger tap")
+            return
+        }
+        print("🧪 Testing '\(action.displayName)' in 2s...")
+        appDelegate?.popover.performClose(nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            action.execute()
+            print("🧪 Done!")
+        }
+    }
+
+    @objc func openAccessSettings() {
+        openAccessibilitySettings()
+    }
+
+    // MARK: - UI Helpers
+
+    func makeRadio(_ title: String, selected: Bool, tag: Int) -> NSButton {
+        let btn = NSButton(radioButtonWithTitle: title, target: self, action: #selector(actionSelected(_:)))
+        btn.font = .systemFont(ofSize: 11)
+        btn.state = selected ? .on : .off
+        btn.tag = tag
+        btn.sizeToFit()
+        return btn
+    }
+
+    func makeCheckbox(_ title: String, checked: Bool, action: Selector) -> NSButton {
+        let btn = NSButton(checkboxWithTitle: title, target: nil, action: action)
+        btn.font = .systemFont(ofSize: 12)
+        btn.state = checked ? .on : .off
+        btn.sizeToFit()
+        return btn
+    }
+
+    func makeLink(_ title: String, action: Selector, color: NSColor = .systemBlue) -> NSButton {
+        let btn = NSButton(title: title, target: nil, action: action)
+        btn.isBordered = false
+        btn.font = .systemFont(ofSize: 11)
+        btn.contentTintColor = color
+        btn.sizeToFit()
+        return btn
+    }
+
+    func sep(_ y: inout CGFloat) {
+        let s = NSBox(frame: NSRect(x: pad, y: y, width: W - pad * 2, height: 1))
+        s.boxType = .separator
+        view.addSubview(s)
+        y += 12
+    }
+
+    func sectionHeader(_ text: String, at y: inout CGFloat) {
+        let l = NSTextField(labelWithString: text)
+        l.font = .systemFont(ofSize: 10, weight: .semibold)
+        l.textColor = .tertiaryLabelColor
+        l.sizeToFit()
+        l.frame.origin = CGPoint(x: pad, y: y)
+        view.addSubview(l)
+        y += 20
+    }
+
+    func label(_ text: String, at y: inout CGFloat) {
+        let l = NSTextField(labelWithString: text)
+        l.font = .systemFont(ofSize: 11)
+        l.textColor = .secondaryLabelColor
+        l.sizeToFit()
+        l.frame.origin = CGPoint(x: pad, y: y)
+        view.addSubview(l)
+        y += 18
+    }
+}
+
+// ============================================================================
 // MARK: - AppDelegate
 // ============================================================================
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
-    var enabledMenuItem: NSMenuItem!
-    var debugMenuItem: NSMenuItem!
-    var sensitivityMenu: NSMenu!
-    var movementMenu: NSMenu!
-
-    var gesture3MenuItems: [NSMenuItem] = []
-    var gesture4MenuItems: [NSMenuItem] = []
-    var gesture5MenuItems: [NSMenuItem] = []
+    var popover = NSPopover()
+    var popoverVC: GesturePopoverVC!
+    var accessibilityTimer: Timer?
 
     func applicationDidFinishLaunching(_ note: Notification) {
         print("========================================")
-        print("  MacGesture v3.0.1")
+        print("  MacGesture v3.1")
         print("========================================")
 
         loadPreferences()
-        checkAccessibility()
+
+        // Check accessibility (with prompt on first launch)
+        let granted = checkAccessibilityWithPrompt()
+        print(granted ? "✅ Accessibility: GRANTED" : "⚠️  Accessibility: NOT YET GRANTED")
+        if !granted {
+            let a = NSAlert()
+            a.messageText = "Accessibility Permission Required"
+            a.informativeText = "MacGesture needs Accessibility permission to detect trackpad gestures and simulate actions.\n\nAfter every rebuild, you may need to toggle the permission OFF and ON again in System Settings.\n\nSystem Settings → Privacy & Security → Accessibility"
+            a.alertStyle = .warning
+            a.addButton(withTitle: "Open System Settings")
+            a.addButton(withTitle: "Continue")
+            if a.runModal() == .alertFirstButtonReturn {
+                openAccessibilitySettings()
+            }
+        }
+
         setupStatusBar()
         startMultitouchMonitoring()
+
+        // Periodic accessibility re-check (every 5s) — auto-restart monitoring when granted
+        accessibilityTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            let nowGranted = isAccessibilityGranted()
+            if nowGranted && registeredDevices.isEmpty {
+                print("✅ Accessibility just granted — starting touch monitoring")
+                startMultitouchMonitoring()
+            }
+        }
 
         print("")
         print("🚀 Running!")
@@ -480,29 +891,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         print("========================================")
     }
 
-    func checkAccessibility() {
-        let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
-        let trusted = AXIsProcessTrustedWithOptions(opts)
-        print(trusted ? "✅ Accessibility: GRANTED" : "⚠️  Accessibility: NOT YET GRANTED")
-        if !trusted {
-            let a = NSAlert()
-            a.messageText = "Accessibility Permission Required"
-            a.informativeText = "MacGesture needs Accessibility permission to simulate clicks and keystrokes.\n\nGrant it in:\nSystem Settings → Privacy & Security → Accessibility"
-            a.alertStyle = .warning
-            a.addButton(withTitle: "Open System Settings")
-            a.addButton(withTitle: "Continue")
-            if a.runModal() == .alertFirstButtonReturn {
-                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
-            }
-        }
-    }
-
     // MARK: - Status Bar
 
     func setupStatusBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         updateIcon()
-        rebuildMenu()
+
+        popoverVC = GesturePopoverVC()
+        popoverVC.appDelegate = self
+        popover.contentViewController = popoverVC
+        popover.behavior = .transient
+        popover.animates = true
+
+        if let button = statusItem.button {
+            button.action = #selector(togglePopover)
+            button.target = self
+        }
     }
 
     func updateIcon() {
@@ -520,254 +924,54 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func rebuildMenu() {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
+    // MARK: - Popover
 
-        // Header
-        let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        header.isEnabled = false
-        header.attributedTitle = NSAttributedString(string: "MacGesture",
-            attributes: [.font: NSFont.boldSystemFont(ofSize: 13)])
-        menu.addItem(header)
-
-        // Summary
-        let summary = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        summary.isEnabled = false
-        summary.attributedTitle = NSAttributedString(
-            string: gesturesSummary(),
-            attributes: [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor.secondaryLabelColor]
-        )
-        menu.addItem(summary)
-
-        menu.addItem(.separator())
-
-        enabledMenuItem = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "e")
-        enabledMenuItem.target = self
-        enabledMenuItem.state = isEnabled ? .on : .off
-        menu.addItem(enabledMenuItem)
-
-        menu.addItem(.separator())
-
-        // ── GESTURE SECTIONS ──
-        gesture3MenuItems = buildGestureSection(menu: menu, gesture: gesture3,
-                                                 action: #selector(select3Finger(_:)))
-        menu.addItem(.separator())
-
-        gesture4MenuItems = buildGestureSection(menu: menu, gesture: gesture4,
-                                                 action: #selector(select4Finger(_:)))
-        menu.addItem(.separator())
-
-        gesture5MenuItems = buildGestureSection(menu: menu, gesture: gesture5,
-                                                 action: #selector(select5Finger(_:)))
-        menu.addItem(.separator())
-
-        // ── SETTINGS ──
-        let sensItem = NSMenuItem(title: "Tap Duration (max)", action: nil, keyEquivalent: "")
-        sensitivityMenu = NSMenu()
-        let durations: [(String, TimeInterval)] = [
-            ("80ms  (very fast only)", 0.08),
-            ("100ms  (fast tap)", 0.10),
-            ("120ms  (default)", 0.12),
-            ("150ms  (comfortable)", 0.15),
-            ("200ms  (relaxed)", 0.20),
-            ("250ms  (generous)", 0.25),
-            ("350ms  (very generous)", 0.35),
-        ]
-        for (label, val) in durations {
-            let mi = NSMenuItem(title: label, action: #selector(setSens(_:)), keyEquivalent: "")
-            mi.target = self; mi.representedObject = val
-            mi.state = (abs(val - tapThreshold) < 0.001) ? .on : .off
-            sensitivityMenu.addItem(mi)
-        }
-        sensItem.submenu = sensitivityMenu
-        menu.addItem(sensItem)
-
-        let movItem = NSMenuItem(title: "Movement Tolerance", action: nil, keyEquivalent: "")
-        movementMenu = NSMenu()
-        let tolerances: [(String, Float)] = [
-            ("Strict  (1.5mm — very still)", 0.015),
-            ("Default  (3mm — jitter OK)", 0.03),
-            ("Loose  (5mm — forgiving)", 0.05),
-            ("Very Loose  (8mm)", 0.08),
-            ("Disabled", 1.0),
-        ]
-        for (label, val) in tolerances {
-            let mi = NSMenuItem(title: label, action: #selector(setMovement(_:)), keyEquivalent: "")
-            mi.target = self; mi.representedObject = val
-            mi.state = (abs(val - maxMovement) < 0.001) ? .on : .off
-            movementMenu.addItem(mi)
-        }
-        movItem.submenu = movementMenu
-        menu.addItem(movItem)
-
-        menu.addItem(.separator())
-
-        // Test & debug
-        let test = NSMenuItem(title: "Test 4-Finger Action (2s)", action: #selector(testAction), keyEquivalent: "t")
-        test.target = self
-        menu.addItem(test)
-
-        let restart = NSMenuItem(title: "Restart Touch Detection", action: #selector(doRestart), keyEquivalent: "")
-        restart.target = self
-        menu.addItem(restart)
-
-        debugMenuItem = NSMenuItem(title: "Debug Logging", action: #selector(toggleDebug), keyEquivalent: "")
-        debugMenuItem.target = self
-        debugMenuItem.state = debugMode ? .on : .off
-        menu.addItem(debugMenuItem)
-
-        menu.addItem(.separator())
-
-        let versionItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        versionItem.isEnabled = false
-        let versionStr = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "3.0.1"
-        versionItem.attributedTitle = NSAttributedString(
-            string: "Version \(versionStr)",
-            attributes: [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor.tertiaryLabelColor]
-        )
-        menu.addItem(versionItem)
-
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit MacGesture", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-
-        statusItem.menu = menu
-    }
-
-    // MARK: - Gesture Section Builder
-
-    func buildGestureSection(menu: NSMenu, gesture: GestureConfig, action: Selector) -> [NSMenuItem] {
-        var items: [NSMenuItem] = []
-
-        // Section header with current state
-        let headerItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        headerItem.isEnabled = false
-        let currentLabel = gesture.action.isEnabled ? gesture.action.displayName : "Off"
-        let headerText = NSMutableAttributedString()
-        headerText.append(NSAttributedString(string: "\(gesture.fingerCount)-FINGER TAP", attributes: [
-            .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
-            .foregroundColor: NSColor.tertiaryLabelColor
-        ]))
-        headerText.append(NSAttributedString(string: "  \(currentLabel)", attributes: [
-            .font: NSFont.systemFont(ofSize: 10, weight: .regular),
-            .foregroundColor: gesture.action.isEnabled ? NSColor.systemBlue : NSColor.tertiaryLabelColor
-        ]))
-        headerItem.attributedTitle = headerText
-        menu.addItem(headerItem)
-
-        // Disabled option
-        let disabledItem = NSMenuItem(title: "Disabled (Off)", action: action, keyEquivalent: "")
-        disabledItem.target = self
-        disabledItem.representedObject = TapAction.none.rawValue
-        disabledItem.state = (gesture.action == .none) ? .on : .off
-        disabledItem.indentationLevel = 1
-        menu.addItem(disabledItem)
-        items.append(disabledItem)
-
-        // Actions by category
-        for category in ["Mouse", "Browser", "Edit", "System"] {
-            let actions = selectableActions.filter { $0.category == category }
-            if actions.isEmpty { continue }
-
-            let catItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-            catItem.isEnabled = false
-            catItem.attributedTitle = NSAttributedString(string: "  \(category)", attributes: [
-                .font: NSFont.systemFont(ofSize: 10, weight: .medium),
-                .foregroundColor: NSColor.secondaryLabelColor
-            ])
-            menu.addItem(catItem)
-
-            for act in actions {
-                let item = NSMenuItem(title: act.displayName, action: action, keyEquivalent: "")
-                item.target = self
-                item.representedObject = act.rawValue
-                item.state = (act == gesture.action) ? .on : .off
-                item.indentationLevel = 2
-                menu.addItem(item)
-                items.append(item)
+    @objc func togglePopover() {
+        if popover.isShown {
+            popover.performClose(nil)
+        } else {
+            popoverVC.rebuildUI()
+            if let button = statusItem.button {
+                popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             }
         }
-
-        return items
     }
 
-    func gesturesSummary() -> String {
-        var parts: [String] = []
-        if gesture3.action.isEnabled { parts.append("  3F → \(gesture3.action.displayName)") }
-        if gesture4.action.isEnabled { parts.append("  4F → \(gesture4.action.displayName)") }
-        if gesture5.action.isEnabled { parts.append("  5F → \(gesture5.action.displayName)") }
-        return parts.isEmpty ? "  No gestures configured" : parts.joined(separator: "\n")
-    }
+    // MARK: - Actions from Popover
 
-    // MARK: - Actions
-
-    @objc func toggleEnabled() {
-        isEnabled.toggle()
-        enabledMenuItem.state = isEnabled ? .on : .off
+    @objc func toggleEnabled(_ sender: NSButton) {
+        isEnabled = (sender.state == .on)
         updateIcon()
         savePreferences()
     }
 
-    @objc func toggleDebug() {
-        debugMode.toggle()
-        debugMenuItem.state = debugMode ? .on : .off
+    @objc func toggleDebug(_ sender: NSButton) {
+        debugMode = (sender.state == .on)
         if debugMode { print("🔍 Debug ON — tap the trackpad to see events") }
     }
 
-    @objc func select3Finger(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-              let action = TapAction(rawValue: raw) else { return }
-        gesture3.action = action
-        finishGestureUpdate("3-finger", action)
-    }
-
-    @objc func select4Finger(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-              let action = TapAction(rawValue: raw) else { return }
-        gesture4.action = action
-        finishGestureUpdate("4-finger", action)
-    }
-
-    @objc func select5Finger(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-              let action = TapAction(rawValue: raw) else { return }
-        gesture5.action = action
-        finishGestureUpdate("5-finger", action)
-    }
-
-    func finishGestureUpdate(_ label: String, _ action: TapAction) {
-        updateIcon()
+    @objc func durationChanged(_ sender: NSPopUpButton) {
+        guard let val = sender.selectedItem?.representedObject as? TimeInterval else { return }
+        tapThreshold = val
         savePreferences()
-        rebuildMenu()
-        print("🔧 \(label) → \(action.displayName)")
+        print("⏱️ Tap duration → \(Int(val * 1000))ms")
     }
 
-    @objc func setSens(_ sender: NSMenuItem) {
-        guard let v = sender.representedObject as? TimeInterval else { return }
-        tapThreshold = v
-        sensitivityMenu.items.forEach { $0.state = (abs(($0.representedObject as? TimeInterval ?? -1) - v) < 0.001) ? .on : .off }
+    @objc func movementChanged(_ sender: NSPopUpButton) {
+        guard let val = sender.selectedItem?.representedObject as? Float else { return }
+        maxMovement = val
         savePreferences()
-        print("⏱️ Tap duration → \(Int(v * 1000))ms")
+        print("📏 Movement tolerance → \(String(format: "%.1f", val * 100))mm")
     }
 
-    @objc func setMovement(_ sender: NSMenuItem) {
-        guard let v = sender.representedObject as? Float else { return }
-        maxMovement = v
-        movementMenu.items.forEach { $0.state = (abs(($0.representedObject as? Float ?? -1) - v) < 0.001) ? .on : .off }
-        savePreferences()
-        print("📏 Movement tolerance → \(String(format: "%.1f", v * 100))mm")
+    @objc func doRestart() {
+        popover.performClose(nil)
+        restartMonitoring()
     }
 
-    @objc func testAction() {
-        let action = gesture4.action
-        print("🧪 Testing '\(action.displayName)' in 2s...")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            action.execute()
-            print("🧪 Done!")
-        }
+    @objc func doQuit() {
+        NSApplication.shared.terminate(nil)
     }
-
-    @objc func doRestart() { restartMonitoring() }
 }
 
 // ============================================================================
