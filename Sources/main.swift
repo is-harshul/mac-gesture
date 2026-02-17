@@ -476,7 +476,7 @@ private let kBuyMeACoffeeURL = "https://www.buymeacoffee.com/is.harshul"
 
 class GesturePopoverVC: NSViewController {
     let W: CGFloat = 300
-    let padH: CGFloat = 8 // horizontal padding (left & right)
+    let padH: CGFloat = 12 // horizontal padding (left & right)
     let padVTop: CGFloat = 8 // padding above header
     let padVBottom: CGFloat = 12 // padding below footer
     var tabControl: NSSegmentedControl!
