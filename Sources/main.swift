@@ -465,13 +465,20 @@ func openAccessibilitySettings() {
 }
 
 // ============================================================================
+// MARK: - External Links
+// ============================================================================
+
+private let kBuyMeACoffeeURL = "https://www.buymeacoffee.com/is.harshul"
+
+// ============================================================================
 // MARK: - Popover Content ViewController
 // ============================================================================
 
 class GesturePopoverVC: NSViewController {
     let W: CGFloat = 300
-    let padH: CGFloat = 24      // horizontal padding (left & right)
-    let padV: CGFloat = 20      // vertical padding (top & bottom)
+    let padH: CGFloat = 8 // horizontal padding (left & right)
+    let padVTop: CGFloat = 8 // padding above header
+    let padVBottom: CGFloat = 12 // padding below footer
     var tabControl: NSSegmentedControl!
     var actionContainer: NSView!
     var actionButtons: [NSButton] = []
@@ -490,7 +497,14 @@ class GesturePopoverVC: NSViewController {
         actionButtons.removeAll()
 
         let innerW = W - padH * 2
-        var y: CGFloat = padV
+        var y: CGFloat = padVBottom
+
+        // ── BUY ME A COFFEE ──
+        let coffeeBtn = makeLink("☕ Buy me a coffee", action: #selector(openBuyMeACoffee))
+        coffeeBtn.target = self
+        coffeeBtn.frame.origin = CGPoint(x: padH, y: y)
+        view.addSubview(coffeeBtn)
+        y += 26
 
         // ── QUIT + VERSION ──
         let quitBtn = makeLink("Quit MacGesture", action: #selector(appDelegate?.doQuit), color: .systemRed)
@@ -654,7 +668,7 @@ class GesturePopoverVC: NSViewController {
         summary.sizeToFit()
         summary.frame.origin = CGPoint(x: W - padH - summary.frame.width, y: y + 4)
         view.addSubview(summary)
-        y += 28 + padV
+        y += 28 + padVTop
 
         // Final
         view.frame = NSRect(x: 0, y: 0, width: W, height: y)
@@ -784,6 +798,11 @@ class GesturePopoverVC: NSViewController {
 
     @objc func openAccessSettings() {
         openAccessibilitySettings()
+    }
+
+    @objc func openBuyMeACoffee() {
+        guard let url = URL(string: kBuyMeACoffeeURL) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     // MARK: - UI Helpers
