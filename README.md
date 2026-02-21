@@ -30,7 +30,7 @@
 
 ## What It Does
 
-Mac Gesture maps **3-finger, 4-finger, and 5-finger trackpad taps** to configurable actions — each independently. Tap with 4 fingers to middle-click a link, 3 fingers to copy, 5 fingers to launch Spotlight. Or any combination you want.
+Mac Gesture maps **3-finger, 4-finger, and 5-finger trackpad taps** to configurable actions — each independently. Tap with 4 fingers to middle-click a link, 3 fingers to copy, 5 fingers to launch Spotlight. Or bind **any keyboard shortcut** you want: ⌘⇧S, ⌥F4, or whatever your apps support. Each gesture can use its own custom shortcut.
 
 All your existing swipe, pinch, and drag gestures continue working — Mac Gesture only triggers on quick taps, not holds or swipes.
 
@@ -52,6 +52,7 @@ Each gesture can be mapped to any of these:
 | **Browser** | Close Tab `⌘W` · New Tab `⌘T` · Reopen Closed Tab `⇧⌘T` · Refresh `⌘R` |
 | **Edit** | Copy `⌘C` · Paste `⌘V` · Undo `⌘Z` |
 | **System** | Mission Control · Launchpad · Spotlight `⌘Space` |
+| **Custom** | **Keyboard Shortcut** — bind any key combo (⌘⇧S, ⌥F4, etc.) to 3, 4, or 5 finger taps |
 | **Off** | Disabled (gesture passes through to macOS) |
 
 ### Tap vs Swipe Detection
@@ -148,6 +149,10 @@ Click the trackpad icon in the menu bar. You'll see three independently configur
 │ Quit MacGesture             │
 └─────────────────────────────┘
 ```
+
+### Custom Keyboard Shortcuts
+
+Assign **any keyboard shortcut** to 3, 4, or 5 finger taps. In the popover, select "Custom Keyboard Shortcut" for the desired gesture, then click **Click to record shortcut...** and press your key combo (⌘⇧S, ⌥F4, ⌃Space, etc.). Each finger count has its own shortcut — e.g. 3 fingers could trigger ⌘C while 4 fingers triggers ⌘⇧T.
 
 ### Tap Duration & Movement Tolerance
 
@@ -307,7 +312,6 @@ Ideas:
 - **Double-tap** — two quick taps for a different action
 - **Per-gesture duration/movement** — separate thresholds for 3/4/5-finger taps
 - **SwiftUI settings window**
-- **Custom keyboard shortcut** — let users define any key combo
 
 ---
 

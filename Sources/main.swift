@@ -588,8 +588,8 @@ private let kBuyMeACoffeeURL = "https://www.buymeacoffee.com/is.harshul"
 class GesturePopoverVC: NSViewController {
     let W: CGFloat = 300
     let padH: CGFloat = 12 // horizontal padding (left & right)
-    let padVTop: CGFloat = 8 // padding above header
-    let padVBottom: CGFloat = 12 // padding below footer
+    let padVTop: CGFloat = 4 // padding above header
+    let padVBottom: CGFloat = 8 // padding below footer
     var tabControl: NSSegmentedControl!
     var actionContainer: NSView!
     var actionButtons: [NSButton] = []
@@ -621,10 +621,10 @@ class GesturePopoverVC: NSViewController {
         coffeeBtn.target = self
         coffeeBtn.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(coffeeBtn)
-        y += 26
+        y += 22
 
         // ── QUIT + VERSION ──
-        let quitBtn = makeLink("Quit MacGesture", action: #selector(appDelegate?.doQuit), color: NSColor.systemRed.withAlphaComponent(0.6))
+        let quitBtn = makeLink("Quit MacGesture", action: #selector(appDelegate?.doQuit), color: NSColor(red: 227/255.0, green: 34/255.0, blue: 39/255.0, alpha: 1.0))
         quitBtn.target = appDelegate
         quitBtn.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(quitBtn)
@@ -636,7 +636,7 @@ class GesturePopoverVC: NSViewController {
         vLabel.sizeToFit()
         vLabel.frame.origin = CGPoint(x: W - padH - vLabel.frame.width, y: y + 1)
         view.addSubview(vLabel)
-        y += 30
+        y += 24
 
         sep(&y)
 
@@ -645,19 +645,19 @@ class GesturePopoverVC: NSViewController {
         debugBtn.target = appDelegate
         debugBtn.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(debugBtn)
-        y += 26
+        y += 22
 
         let restartBtn = makeLink("Restart Touch Detection", action: #selector(appDelegate?.doRestart))
         restartBtn.target = appDelegate
         restartBtn.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(restartBtn)
-        y += 26
+        y += 22
 
         let testBtn = makeLink("Test Current Tab Action (2s)", action: #selector(doTest))
         testBtn.target = self
         testBtn.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(testBtn)
-        y += 30
+        y += 24
 
         sep(&y)
 
@@ -679,7 +679,7 @@ class GesturePopoverVC: NSViewController {
         }
         movPopup.target = appDelegate; movPopup.action = #selector(appDelegate?.movementChanged(_:))
         view.addSubview(movPopup)
-        y += 30
+        y += 28
 
         // Tap duration
         label("Tap Duration (max)", at: &y)
@@ -698,7 +698,7 @@ class GesturePopoverVC: NSViewController {
         }
         durPopup.target = appDelegate; durPopup.action = #selector(appDelegate?.durationChanged(_:))
         view.addSubview(durPopup)
-        y += 32
+        y += 28
 
         sep(&y)
 
@@ -720,7 +720,7 @@ class GesturePopoverVC: NSViewController {
         for i in 0..<3 { tabControl.setWidth(segmentWidth, forSegment: i) }
         view.addSubview(tabControl)
         updateTabAppearance()
-        y += 36
+        y += 30
 
         sep(&y)
 
@@ -730,7 +730,7 @@ class GesturePopoverVC: NSViewController {
         enableBtn.font = .systemFont(ofSize: 12, weight: .medium)
         enableBtn.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(enableBtn)
-        y += 30
+        y += 24
 
         sep(&y)
 
@@ -739,11 +739,11 @@ class GesturePopoverVC: NSViewController {
         let accessBg = NSView(frame: NSRect(x: padH, y: y, width: innerW, height: 28))
         accessBg.wantsLayer = true
         accessBg.layer?.cornerRadius = 6
-        let softGreen = NSColor.systemGreen.withAlphaComponent(0.55)
-        let softAmber = NSColor.systemOrange.withAlphaComponent(0.55)
+        let softGreen = NSColor(red: 0.53, green: 0.92, blue: 0.45, alpha: 0.95)
+        let softAmber = NSColor(red: 0.72, green: 0.62, blue: 0.20, alpha: 0.95)
         accessBg.layer?.backgroundColor = granted
-            ? NSColor.systemGreen.withAlphaComponent(0.07).cgColor
-            : NSColor.systemOrange.withAlphaComponent(0.07).cgColor
+            ? softGreen.withAlphaComponent(0.1).cgColor
+            : softAmber.withAlphaComponent(0.1).cgColor
         view.addSubview(accessBg)
 
         let dotColor: NSColor = granted ? softGreen : softAmber
@@ -770,14 +770,14 @@ class GesturePopoverVC: NSViewController {
             grantBtn.frame.origin = CGPoint(x: W - padH - grantBtn.frame.width - 6, y: y + 5)
             view.addSubview(grantBtn)
         }
-        y += 36
+        y += 30
 
         // ── HEADER ──
         let header = NSTextField(labelWithString: "MacGesture")
         header.font = .boldSystemFont(ofSize: 15)
         header.textColor = .labelColor
         header.sizeToFit()
-        header.frame.origin = CGPoint(x: padH, y: y - 6)
+        header.frame.origin = CGPoint(x: padH, y: y - 4)
         view.addSubview(header)
 
         let summaryText = gesturesSummaryShort()
@@ -785,9 +785,9 @@ class GesturePopoverVC: NSViewController {
         summary.font = .systemFont(ofSize: 9)
         summary.textColor = .tertiaryLabelColor
         summary.sizeToFit()
-        summary.frame.origin = CGPoint(x: W - padH - summary.frame.width, y: y + 4)
+        summary.frame.origin = CGPoint(x: W - padH - summary.frame.width, y: y + 2)
         view.addSubview(summary)
-        y += 28 + padVTop
+        y += 22 + padVTop
 
         // Final — set both the view frame and preferredContentSize so the
         // popover sizes correctly on every open, not just the first time.
@@ -802,14 +802,14 @@ class GesturePopoverVC: NSViewController {
         stopRecording()
 
         let gesture = currentGesture()
-        var y: CGFloat = 6
+        var y: CGFloat = 4
 
         // Disabled option
         let offBtn = makeRadio("Disabled (Off)", selected: gesture.action == .none, tag: -1)
         offBtn.frame.origin = CGPoint(x: padH + 4, y: y)
         actionContainer.addSubview(offBtn)
         actionButtons.append(offBtn)
-        y += 22
+        y += 20
 
         for category in ["Mouse", "Browser", "Edit", "System"] {
             let actions = selectableActions.filter { $0.category == category }
@@ -819,9 +819,9 @@ class GesturePopoverVC: NSViewController {
             catLabel.font = .systemFont(ofSize: 9, weight: .semibold)
             catLabel.textColor = .tertiaryLabelColor
             catLabel.sizeToFit()
-            catLabel.frame.origin = CGPoint(x: padH + 4, y: y + 3)
+            catLabel.frame.origin = CGPoint(x: padH + 4, y: y + 2)
             actionContainer.addSubview(catLabel)
-            y += 18
+            y += 16
 
             for act in actions {
                 let tag = TapAction.allCases.firstIndex(of: act) ?? 0
@@ -829,9 +829,9 @@ class GesturePopoverVC: NSViewController {
                 btn.frame.origin = CGPoint(x: padH + 16, y: y)
                 actionContainer.addSubview(btn)
                 actionButtons.append(btn)
-                y += 22
+                y += 20
             }
-            y += 4
+            y += 2
         }
 
         // ── CUSTOM SHORTCUT ──
@@ -839,16 +839,16 @@ class GesturePopoverVC: NSViewController {
         customCatLabel.font = .systemFont(ofSize: 9, weight: .semibold)
         customCatLabel.textColor = .tertiaryLabelColor
         customCatLabel.sizeToFit()
-        customCatLabel.frame.origin = CGPoint(x: padH + 4, y: y + 3)
+        customCatLabel.frame.origin = CGPoint(x: padH + 4, y: y + 2)
         actionContainer.addSubview(customCatLabel)
-        y += 18
+        y += 16
 
         let customTag = TapAction.allCases.firstIndex(of: .customShortcut) ?? 0
         let customBtn = makeRadio("Custom Keyboard Shortcut", selected: gesture.action == .customShortcut, tag: customTag)
         customBtn.frame.origin = CGPoint(x: padH + 16, y: y)
         actionContainer.addSubview(customBtn)
         actionButtons.append(customBtn)
-        y += 24
+        y += 22
 
         // Shortcut recorder button
         let cs = customShortcutFor(fingerCount: gesture.fingerCount)
@@ -856,14 +856,14 @@ class GesturePopoverVC: NSViewController {
         let recorder = NSButton(title: recorderTitle, target: self, action: #selector(startRecordingShortcut))
         recorder.bezelStyle = .recessed
         recorder.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
-        recorder.frame = NSRect(x: padH + 28, y: y, width: W - padH * 2 - 28, height: 30)
+        recorder.frame = NSRect(x: padH + 28, y: y, width: W - padH * 2 - 28, height: 26)
         recorder.isEnabled = (gesture.action == .customShortcut)
         recorder.alphaValue = (gesture.action == .customShortcut) ? 1.0 : 0.4
         actionContainer.addSubview(recorder)
         shortcutRecorderBtn = recorder
-        y += 30
+        y += 28
 
-        y += 6
+        y += 4
         actionContainer.frame.size.height = y
     }
 
@@ -1044,7 +1044,7 @@ class GesturePopoverVC: NSViewController {
         let s = NSBox(frame: NSRect(x: padH, y: y, width: W - padH * 2, height: 1))
         s.boxType = .separator
         view.addSubview(s)
-        y += 12
+        y += 8
     }
 
     func sectionHeader(_ text: String, at y: inout CGFloat) {
@@ -1054,7 +1054,7 @@ class GesturePopoverVC: NSViewController {
         l.sizeToFit()
         l.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(l)
-        y += 20
+        y += 16
     }
 
     func label(_ text: String, at y: inout CGFloat) {
@@ -1064,7 +1064,7 @@ class GesturePopoverVC: NSViewController {
         l.sizeToFit()
         l.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(l)
-        y += 18
+        y += 16
     }
 }
 
@@ -1104,7 +1104,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         startMultitouchMonitoring()
 
         // Periodic accessibility re-check (every 5s) — auto-restart monitoring when granted
-        accessibilityTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+        accessibilityTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
             let nowGranted = isAccessibilityGranted()
             if nowGranted && registeredDevices.isEmpty {
                 print("✅ Accessibility just granted — starting touch monitoring")
@@ -1176,6 +1176,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             popover.contentSize = popoverVC.preferredContentSize
             if let button = statusItem.button {
                 popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+                // Activate the app so the popover's window becomes key,
+                // which allows .transient behavior to dismiss on outside click.
+                NSApp.activate(ignoringOtherApps: true)
+                popover.contentViewController?.view.window?.makeKey()
             }
         }
     }
