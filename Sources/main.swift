@@ -143,7 +143,7 @@ enum TapAction: String, CaseIterable {
         case .copySelection:    simulateKeyCombo(key: kVK_ANSI_C, flags: .maskCommand)
         case .pasteClipboard:   simulateKeyCombo(key: kVK_ANSI_V, flags: .maskCommand)
         case .undo:             simulateKeyCombo(key: kVK_ANSI_Z, flags: .maskCommand)
-        case .missionControl:   simulateKeyCombo(key: kVK_UpArrow, flags: .maskControl)
+        case .missionControl:   openMissionControl()
         case .launchpad:        openLaunchpad()
         case .spotlight:        simulateKeyCombo(key: kVK_Space, flags: .maskCommand)
         }
@@ -193,6 +193,17 @@ func simulateKeyCombo(key: Int, flags: CGEventFlags) {
     usleep(15_000)
     keyUp.post(tap: .cghidEventTap)
     if debugMode { print("⌨️ Key combo executed") }
+}
+
+func openMissionControl() {
+    // Key code 160 = Mission Control (F3/Exposé key), same approach as Launchpad.
+    // Falls back to launching Mission Control.app if the key event doesn't work.
+    if let kd = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(160), keyDown: true),
+       let ku = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(160), keyDown: false) {
+        kd.post(tap: .cghidEventTap); usleep(15_000); ku.post(tap: .cghidEventTap)
+    } else {
+        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Mission Control.app"))
+    }
 }
 
 func openLaunchpad() {
@@ -496,6 +507,9 @@ class GesturePopoverVC: NSViewController {
         view.subviews.forEach { $0.removeFromSuperview() }
         actionButtons.removeAll()
 
+        // Reset view frame to prevent stale geometry from previous popover showing
+        view.frame = NSRect(x: 0, y: 0, width: W, height: 100)
+
         let innerW = W - padH * 2
         var y: CGFloat = padVBottom
 
@@ -670,8 +684,11 @@ class GesturePopoverVC: NSViewController {
         view.addSubview(summary)
         y += 28 + padVTop
 
-        // Final
-        view.frame = NSRect(x: 0, y: 0, width: W, height: y)
+        // Final — set both the view frame and preferredContentSize so the
+        // popover sizes correctly on every open, not just the first time.
+        let finalSize = NSSize(width: W, height: y)
+        view.frame = NSRect(origin: .zero, size: finalSize)
+        preferredContentSize = finalSize
     }
 
     func buildActionList() {
@@ -954,7 +971,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else {
-            popoverVC.rebuildUI()
+            // Rebuild UI first, then assign a fresh VC so the popover
+            // picks up the new preferredContentSize cleanly every time.
+            popoverVC = GesturePopoverVC()
+            popoverVC.appDelegate = self
+            popover.contentViewController = popoverVC
+            popover.contentSize = popoverVC.preferredContentSize
             if let button = statusItem.button {
                 popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             }
