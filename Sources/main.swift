@@ -99,6 +99,7 @@ enum TapAction: String, CaseIterable {
     case missionControl   = "mission_control"
     case launchpad        = "launchpad"
     case spotlight        = "spotlight"
+    case customShortcut   = "custom_shortcut"
 
     var displayName: String {
         switch self {
@@ -115,6 +116,7 @@ enum TapAction: String, CaseIterable {
         case .missionControl: return "Mission Control"
         case .launchpad:      return "Launchpad"
         case .spotlight:      return "Spotlight  (⌘Space)"
+        case .customShortcut: return "Custom Shortcut"
         }
     }
 
@@ -125,6 +127,7 @@ enum TapAction: String, CaseIterable {
         case .closeTab, .newTab, .reopenTab, .refreshPage: return "Browser"
         case .copySelection, .pasteClipboard, .undo: return "Edit"
         case .missionControl, .launchpad, .spotlight: return "System"
+        case .customShortcut: return "Custom"
         }
     }
 
@@ -146,11 +149,87 @@ enum TapAction: String, CaseIterable {
         case .missionControl:   openMissionControl()
         case .launchpad:        openLaunchpad()
         case .spotlight:        simulateKeyCombo(key: kVK_Space, flags: .maskCommand)
+        case .customShortcut:   break // handled separately with finger count context
         }
     }
 }
 
-let selectableActions = TapAction.allCases.filter { $0 != .none }
+// ── Custom Shortcut Storage ──
+
+struct CustomShortcut {
+    var keyCode: Int
+    var modifiers: UInt64 // CGEventFlags.rawValue
+
+    var isEmpty: Bool { return keyCode == -1 }
+
+    func execute() {
+        guard !isEmpty else { return }
+        simulateKeyCombo(key: keyCode, flags: CGEventFlags(rawValue: modifiers))
+    }
+
+    var displayString: String {
+        guard !isEmpty else { return "Not set" }
+        return formatShortcut(keyCode: keyCode, modifiers: CGEventFlags(rawValue: modifiers))
+    }
+}
+
+var customShortcut3 = CustomShortcut(keyCode: -1, modifiers: 0)
+var customShortcut4 = CustomShortcut(keyCode: -1, modifiers: 0)
+var customShortcut5 = CustomShortcut(keyCode: -1, modifiers: 0)
+
+func customShortcutFor(fingerCount: Int) -> CustomShortcut {
+    switch fingerCount {
+    case 3: return customShortcut3
+    case 4: return customShortcut4
+    case 5: return customShortcut5
+    default: return CustomShortcut(keyCode: -1, modifiers: 0)
+    }
+}
+
+func executeGestureAction(action: TapAction, fingerCount: Int) {
+    if action == .customShortcut {
+        customShortcutFor(fingerCount: fingerCount).execute()
+    } else {
+        action.execute()
+    }
+}
+
+func formatShortcut(keyCode: Int, modifiers: CGEventFlags) -> String {
+    var parts: [String] = []
+    if modifiers.contains(.maskControl)   { parts.append("⌃") }
+    if modifiers.contains(.maskAlternate) { parts.append("⌥") }
+    if modifiers.contains(.maskShift)     { parts.append("⇧") }
+    if modifiers.contains(.maskCommand)   { parts.append("⌘") }
+
+    let keyNames: [Int: String] = [
+        kVK_Return: "↩", kVK_Tab: "⇥", kVK_Space: "Space", kVK_Delete: "⌫",
+        kVK_Escape: "⎋", kVK_ForwardDelete: "⌦",
+        kVK_UpArrow: "↑", kVK_DownArrow: "↓", kVK_LeftArrow: "←", kVK_RightArrow: "→",
+        kVK_F1: "F1", kVK_F2: "F2", kVK_F3: "F3", kVK_F4: "F4",
+        kVK_F5: "F5", kVK_F6: "F6", kVK_F7: "F7", kVK_F8: "F8",
+        kVK_F9: "F9", kVK_F10: "F10", kVK_F11: "F11", kVK_F12: "F12",
+        kVK_Home: "Home", kVK_End: "End", kVK_PageUp: "PgUp", kVK_PageDown: "PgDn",
+        kVK_ANSI_A: "A", kVK_ANSI_B: "B", kVK_ANSI_C: "C", kVK_ANSI_D: "D",
+        kVK_ANSI_E: "E", kVK_ANSI_F: "F", kVK_ANSI_G: "G", kVK_ANSI_H: "H",
+        kVK_ANSI_I: "I", kVK_ANSI_J: "J", kVK_ANSI_K: "K", kVK_ANSI_L: "L",
+        kVK_ANSI_M: "M", kVK_ANSI_N: "N", kVK_ANSI_O: "O", kVK_ANSI_P: "P",
+        kVK_ANSI_Q: "Q", kVK_ANSI_R: "R", kVK_ANSI_S: "S", kVK_ANSI_T: "T",
+        kVK_ANSI_U: "U", kVK_ANSI_V: "V", kVK_ANSI_W: "W", kVK_ANSI_X: "X",
+        kVK_ANSI_Y: "Y", kVK_ANSI_Z: "Z",
+        kVK_ANSI_0: "0", kVK_ANSI_1: "1", kVK_ANSI_2: "2", kVK_ANSI_3: "3",
+        kVK_ANSI_4: "4", kVK_ANSI_5: "5", kVK_ANSI_6: "6", kVK_ANSI_7: "7",
+        kVK_ANSI_8: "8", kVK_ANSI_9: "9",
+        kVK_ANSI_Minus: "-", kVK_ANSI_Equal: "=", kVK_ANSI_LeftBracket: "[",
+        kVK_ANSI_RightBracket: "]", kVK_ANSI_Backslash: "\\", kVK_ANSI_Semicolon: ";",
+        kVK_ANSI_Quote: "'", kVK_ANSI_Comma: ",", kVK_ANSI_Period: ".",
+        kVK_ANSI_Slash: "/", kVK_ANSI_Grave: "`",
+    ]
+
+    parts.append(keyNames[keyCode] ?? "Key\(keyCode)")
+    return parts.joined()
+}
+
+let selectableActions = TapAction.allCases.filter { $0 != .none && $0 != .customShortcut }
 
 // ============================================================================
 // MARK: - Action Execution Helpers
@@ -269,6 +348,19 @@ func loadPreferences() {
     if defaults.object(forKey: kEnabled) != nil { isEnabled = defaults.bool(forKey: kEnabled) }
     if defaults.object(forKey: kMaxMovement) != nil { maxMovement = Float(defaults.double(forKey: kMaxMovement)) }
 
+    // Load custom shortcuts
+    for fc in [3, 4, 5] {
+        let keyVal = defaults.object(forKey: "custom_key_\(fc)finger") as? Int ?? -1
+        let modVal = defaults.object(forKey: "custom_mod_\(fc)finger") as? UInt64 ?? 0
+        let cs = CustomShortcut(keyCode: keyVal, modifiers: modVal)
+        switch fc {
+        case 3: customShortcut3 = cs
+        case 4: customShortcut4 = cs
+        case 5: customShortcut5 = cs
+        default: break
+        }
+    }
+
     // Migrate old single-action preference
     if let old = defaults.string(forKey: "selectedAction"), let a = TapAction(rawValue: old) {
         gesture4.action = a
@@ -284,6 +376,13 @@ func savePreferences() {
     defaults.set(tapThreshold, forKey: kSensitivity)
     defaults.set(isEnabled, forKey: kEnabled)
     defaults.set(Double(maxMovement), forKey: kMaxMovement)
+
+    // Save custom shortcuts
+    for fc in [3, 4, 5] {
+        let cs = customShortcutFor(fingerCount: fc)
+        defaults.set(cs.keyCode, forKey: "custom_key_\(fc)finger")
+        defaults.set(cs.modifiers, forKey: "custom_mod_\(fc)finger")
+    }
 }
 
 // ============================================================================
@@ -376,7 +475,8 @@ let touchCallback: MTContactCallbackFunction = { _, touchData, numTouches, times
 
         if validDuration && validMovement && validGesture {
             let execAction = action
-            DispatchQueue.main.async { execAction.execute() }
+            let fingers = peakFingers
+            DispatchQueue.main.async { executeGestureAction(action: execAction, fingerCount: fingers) }
         }
 
         maxFingersInGesture = 0
@@ -494,6 +594,9 @@ class GesturePopoverVC: NSViewController {
     var actionContainer: NSView!
     var actionButtons: [NSButton] = []
     var selectedTab = 0  // 0=3F, 1=4F, 2=5F — default to 3F (primary default gesture)
+    var shortcutRecorderBtn: NSButton?
+    var keyMonitor: Any?
+    var isRecording = false
 
     weak var appDelegate: AppDelegate?
 
@@ -521,7 +624,7 @@ class GesturePopoverVC: NSViewController {
         y += 26
 
         // ── QUIT + VERSION ──
-        let quitBtn = makeLink("Quit MacGesture", action: #selector(appDelegate?.doQuit), color: .systemRed)
+        let quitBtn = makeLink("Quit MacGesture", action: #selector(appDelegate?.doQuit), color: NSColor.systemRed.withAlphaComponent(0.6))
         quitBtn.target = appDelegate
         quitBtn.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(quitBtn)
@@ -636,12 +739,14 @@ class GesturePopoverVC: NSViewController {
         let accessBg = NSView(frame: NSRect(x: padH, y: y, width: innerW, height: 28))
         accessBg.wantsLayer = true
         accessBg.layer?.cornerRadius = 6
+        let softGreen = NSColor.systemGreen.withAlphaComponent(0.55)
+        let softAmber = NSColor.systemOrange.withAlphaComponent(0.55)
         accessBg.layer?.backgroundColor = granted
-            ? NSColor.systemGreen.withAlphaComponent(0.12).cgColor
-            : NSColor.systemOrange.withAlphaComponent(0.12).cgColor
+            ? NSColor.systemGreen.withAlphaComponent(0.07).cgColor
+            : NSColor.systemOrange.withAlphaComponent(0.07).cgColor
         view.addSubview(accessBg)
 
-        let dotColor: NSColor = granted ? .systemGreen : .systemOrange
+        let dotColor: NSColor = granted ? softGreen : softAmber
         let dotLabel = NSTextField(labelWithString: "●")
         dotLabel.font = .systemFont(ofSize: 10)
         dotLabel.textColor = dotColor
@@ -652,13 +757,13 @@ class GesturePopoverVC: NSViewController {
         let statusText = granted ? "Accessibility: Granted" : "Accessibility: Not Granted"
         let statusLabel = NSTextField(labelWithString: statusText)
         statusLabel.font = .systemFont(ofSize: 11, weight: .medium)
-        statusLabel.textColor = granted ? .systemGreen : .systemOrange
+        statusLabel.textColor = granted ? softGreen : softAmber
         statusLabel.sizeToFit()
         statusLabel.frame.origin = CGPoint(x: padH + 22, y: y + 6)
         view.addSubview(statusLabel)
 
         if !granted {
-            let grantBtn = makeLink("Grant →", action: #selector(openAccessSettings), color: .systemOrange)
+            let grantBtn = makeLink("Grant →", action: #selector(openAccessSettings), color: softAmber)
             grantBtn.target = self
             grantBtn.font = .systemFont(ofSize: 11, weight: .medium)
             grantBtn.sizeToFit()
@@ -672,7 +777,7 @@ class GesturePopoverVC: NSViewController {
         header.font = .boldSystemFont(ofSize: 15)
         header.textColor = .labelColor
         header.sizeToFit()
-        header.frame.origin = CGPoint(x: padH, y: y)
+        header.frame.origin = CGPoint(x: padH, y: y - 6)
         view.addSubview(header)
 
         let summaryText = gesturesSummaryShort()
@@ -694,6 +799,7 @@ class GesturePopoverVC: NSViewController {
     func buildActionList() {
         actionContainer.subviews.forEach { $0.removeFromSuperview() }
         actionButtons.removeAll()
+        stopRecording()
 
         let gesture = currentGesture()
         var y: CGFloat = 6
@@ -727,6 +833,36 @@ class GesturePopoverVC: NSViewController {
             }
             y += 4
         }
+
+        // ── CUSTOM SHORTCUT ──
+        let customCatLabel = NSTextField(labelWithString: "CUSTOM")
+        customCatLabel.font = .systemFont(ofSize: 9, weight: .semibold)
+        customCatLabel.textColor = .tertiaryLabelColor
+        customCatLabel.sizeToFit()
+        customCatLabel.frame.origin = CGPoint(x: padH + 4, y: y + 3)
+        actionContainer.addSubview(customCatLabel)
+        y += 18
+
+        let customTag = TapAction.allCases.firstIndex(of: .customShortcut) ?? 0
+        let customBtn = makeRadio("Custom Keyboard Shortcut", selected: gesture.action == .customShortcut, tag: customTag)
+        customBtn.frame.origin = CGPoint(x: padH + 16, y: y)
+        actionContainer.addSubview(customBtn)
+        actionButtons.append(customBtn)
+        y += 24
+
+        // Shortcut recorder button
+        let cs = customShortcutFor(fingerCount: gesture.fingerCount)
+        let recorderTitle = cs.isEmpty ? "Click to record shortcut..." : cs.displayString
+        let recorder = NSButton(title: recorderTitle, target: self, action: #selector(startRecordingShortcut))
+        recorder.bezelStyle = .recessed
+        recorder.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
+        recorder.frame = NSRect(x: padH + 28, y: y, width: W - padH * 2 - 28, height: 30)
+        recorder.isEnabled = (gesture.action == .customShortcut)
+        recorder.alphaValue = (gesture.action == .customShortcut) ? 1.0 : 0.4
+        actionContainer.addSubview(recorder)
+        shortcutRecorderBtn = recorder
+        y += 30
+
         y += 6
         actionContainer.frame.size.height = y
     }
@@ -796,19 +932,73 @@ class GesturePopoverVC: NSViewController {
                 }
             }
         }
+
+        // Enable/disable shortcut recorder based on selection
+        let isCustom = (action == .customShortcut)
+        shortcutRecorderBtn?.isEnabled = isCustom
+        shortcutRecorderBtn?.alphaValue = isCustom ? 1.0 : 0.4
+        if !isCustom { stopRecording() }
+
         updateTabAppearance()
     }
 
+    @objc func startRecordingShortcut() {
+        guard !isRecording else { return }
+        isRecording = true
+        shortcutRecorderBtn?.title = "Press a key combo..."
+        shortcutRecorderBtn?.contentTintColor = .systemOrange
+
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+            guard let self = self else { return event }
+            let keyCode = Int(event.keyCode)
+            // Convert NSEvent modifier flags to CGEventFlags
+            var cgFlags: UInt64 = 0
+            if event.modifierFlags.contains(.command)  { cgFlags |= CGEventFlags.maskCommand.rawValue }
+            if event.modifierFlags.contains(.shift)    { cgFlags |= CGEventFlags.maskShift.rawValue }
+            if event.modifierFlags.contains(.option)   { cgFlags |= CGEventFlags.maskAlternate.rawValue }
+            if event.modifierFlags.contains(.control)  { cgFlags |= CGEventFlags.maskControl.rawValue }
+
+            let cs = CustomShortcut(keyCode: keyCode, modifiers: cgFlags)
+            let fingerCount = self.currentGesture().fingerCount
+            switch fingerCount {
+            case 3: customShortcut3 = cs
+            case 4: customShortcut4 = cs
+            case 5: customShortcut5 = cs
+            default: break
+            }
+            savePreferences()
+
+            self.shortcutRecorderBtn?.title = cs.displayString
+            self.shortcutRecorderBtn?.contentTintColor = nil
+            self.stopRecording()
+            print("🔧 Custom shortcut for \(fingerCount)F → \(cs.displayString)")
+            return nil // consume the event
+        }
+    }
+
+    func stopRecording() {
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyMonitor = nil
+        }
+        isRecording = false
+    }
+
     @objc func doTest() {
-        let action = currentGesture().action
+        let gesture = currentGesture()
+        let action = gesture.action
         guard action.isEnabled else {
-            print("🧪 No action configured for \(currentGesture().fingerCount)-finger tap")
+            print("🧪 No action configured for \(gesture.fingerCount)-finger tap")
             return
         }
-        print("🧪 Testing '\(action.displayName)' in 2s...")
+        let fingerCount = gesture.fingerCount
+        let displayName = action == .customShortcut
+            ? customShortcutFor(fingerCount: fingerCount).displayString
+            : action.displayName
+        print("🧪 Testing '\(displayName)' in 2s...")
         appDelegate?.popover.performClose(nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            action.execute()
+            executeGestureAction(action: action, fingerCount: fingerCount)
             print("🧪 Done!")
         }
     }
@@ -924,9 +1114,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         print("")
         print("🚀 Running!")
-        print("   3-finger: \(gesture3.action.displayName)")
-        print("   4-finger: \(gesture4.action.displayName)")
-        print("   5-finger: \(gesture5.action.displayName)")
+        for (g, fc) in [(gesture3, 3), (gesture4, 4), (gesture5, 5)] {
+            let name = g.action == .customShortcut
+                ? "\(g.action.displayName) (\(customShortcutFor(fingerCount: fc).displayString))"
+                : g.action.displayName
+            print("   \(fc)-finger: \(name)")
+        }
         print("   Tap window:   \(Int(tapThreshold * 1000))ms")
         print("   Max movement: \(String(format: "%.2f", maxMovement))")
         print("========================================")
@@ -954,9 +1147,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.image = createMenuBarIcon(enabled: isEnabled)
         if isEnabled {
             var active: [String] = []
-            if gesture3.action.isEnabled { active.append("3F→\(gesture3.action.displayName)") }
-            if gesture4.action.isEnabled { active.append("4F→\(gesture4.action.displayName)") }
-            if gesture5.action.isEnabled { active.append("5F→\(gesture5.action.displayName)") }
+            for (g, fc) in [(gesture3, 3), (gesture4, 4), (gesture5, 5)] {
+                guard g.action.isEnabled else { continue }
+                let name = g.action == .customShortcut
+                    ? customShortcutFor(fingerCount: fc).displayString
+                    : g.action.displayName
+                active.append("\(fc)F→\(name)")
+            }
             statusItem.button?.toolTip = active.isEmpty
                 ? "MacGesture — No gestures configured"
                 : "MacGesture — \(active.joined(separator: ", "))"
