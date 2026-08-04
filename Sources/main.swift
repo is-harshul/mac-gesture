@@ -2,6 +2,7 @@ import Cocoa
 import Foundation
 import Carbon.HIToolbox
 import ServiceManagement
+import IOKit
 
 // ============================================================================
 // MARK: - MultitouchSupport Framework Bridge
@@ -42,6 +43,13 @@ private let _MTDeviceStop: @convention(c) (UnsafeMutableRawPointer) -> Void = {
 private let _MTRegisterContactFrameCallback: @convention(c) (UnsafeMutableRawPointer, MTContactCallbackFunction) -> Void = {
     guard let handle = mtFramework, let sym = dlsym(handle, "MTRegisterContactFrameCallback") else {
         fatalError("Cannot load MTRegisterContactFrameCallback")
+    }
+    return unsafeBitCast(sym, to: (@convention(c) (UnsafeMutableRawPointer, MTContactCallbackFunction) -> Void).self)
+}()
+
+private let _MTUnregisterContactFrameCallback: @convention(c) (UnsafeMutableRawPointer, MTContactCallbackFunction) -> Void = {
+    guard let handle = mtFramework, let sym = dlsym(handle, "MTUnregisterContactFrameCallback") else {
+        fatalError("Cannot load MTUnregisterContactFrameCallback")
     }
     return unsafeBitCast(sym, to: (@convention(c) (UnsafeMutableRawPointer, MTContactCallbackFunction) -> Void).self)
 }()
@@ -517,9 +525,15 @@ func startMultitouchMonitoring() {
 }
 
 func restartMonitoring() {
-    for d in registeredDevices { _MTDeviceStop(d) }
+    // Tear down old handles before re-enumerating. Without this, each restart
+    // leaks an AppleMultitouchDeviceUserClient in kernel space; ~100 leaks
+    // accumulated over a day eventually break frame delivery for all devices.
+    for d in registeredDevices {
+        _MTUnregisterContactFrameCallback(d, touchCallback)
+        _MTDeviceStop(d)
+    }
     registeredDevices.removeAll()
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { startMultitouchMonitoring() }
+    startMultitouchMonitoring()
 }
 
 // ============================================================================
@@ -1182,6 +1196,42 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 print("✅ Accessibility just granted — starting touch monitoring")
                 startMultitouchMonitoring()
             }
+        }
+
+        // Watch for AppleMultitouchDevice appearances. The held MTDevice handle goes
+        // stale when the underlying IOService is destroyed and recreated — happens on
+        // lid-close (internal trackpad SPI re-enumerates) and on Bluetooth trackpad
+        // power-cycle. kIOFirstMatchNotification fires after the new IOService has
+        // started; re-enumerate via restartMonitoring to pick up the fresh handle.
+        let notifyPort = IONotificationPortCreate(kIOMainPortDefault)
+        let runLoopSource = IONotificationPortGetRunLoopSource(notifyPort!).takeUnretainedValue()
+        CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+
+        let onMatched: IOServiceMatchingCallback = { _, iter in
+            var count = 0
+            var svc = IOIteratorNext(iter)
+            while svc != 0 {
+                count += 1
+                IOObjectRelease(svc)
+                svc = IOIteratorNext(iter)
+            }
+            print("🔌 \(count) multitouch device(s) appeared — restarting monitoring")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                restartMonitoring()
+            }
+        }
+
+        var addedIter: io_iterator_t = 0
+        IOServiceAddMatchingNotification(notifyPort, kIOFirstMatchNotification,
+            IOServiceMatching("AppleMultitouchDevice"), onMatched, nil, &addedIter)
+
+        // Drain the initial iterator to arm the notification. The pre-existing devices
+        // are already registered via startMultitouchMonitoring() above, so we discard
+        // them here without invoking the callback (no restart needed at launch).
+        var initialSvc = IOIteratorNext(addedIter)
+        while initialSvc != 0 {
+            IOObjectRelease(initialSvc)
+            initialSvc = IOIteratorNext(addedIter)
         }
 
         print("")
