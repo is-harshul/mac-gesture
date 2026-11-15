@@ -443,6 +443,20 @@ func testHapticGateRejectsNonFiniteTime() {
 
 // MARK: - Run
 
+func testRetryScheduleYieldsDelaysInOrder() {
+    var schedule = RetrySchedule()
+    var got: [Double] = []
+    for _ in 0..<7 { if let d = schedule.nextDelay() { got.append(d) } }
+    expect(got == [0.5, 1, 2, 3, 5, 8, 12], "delays in order, got \(got)")
+}
+
+func testRetryScheduleEnds() {
+    var schedule = RetrySchedule()
+    for _ in 0..<7 { _ = schedule.nextDelay() }
+    expect(schedule.nextDelay() == nil, "eighth call is nil")
+    expect(schedule.nextDelay() == nil, "ninth call is nil")
+}
+
 test("testParseKeepsOnlyTouchingStates", testParseKeepsOnlyTouchingStates)
 test("testParseEmptyFrame", testParseEmptyFrame)
 test("testParseRejectsNilPointerWithCount", testParseRejectsNilPointerWithCount)
@@ -485,6 +499,8 @@ test("testPipelineKeyDownForwards", testPipelineKeyDownForwards)
 test("testHapticGateFirstPulseAllowed", testHapticGateFirstPulseAllowed)
 test("testHapticGateBlocksWithinInterval", testHapticGateBlocksWithinInterval)
 test("testHapticGateRejectsNonFiniteTime", testHapticGateRejectsNonFiniteTime)
+test("testRetryScheduleYieldsDelaysInOrder", testRetryScheduleYieldsDelaysInOrder)
+test("testRetryScheduleEnds", testRetryScheduleEnds)
 
 print("\(totalPassed) passed, \(totalFailed) failed")
 exit(totalFailed == 0 ? 0 : 1)

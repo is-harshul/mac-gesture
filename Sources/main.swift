@@ -46,6 +46,12 @@ private let _MTRegisterContactFrameCallback: @convention(c) (UnsafeMutableRawPoi
     return unsafeBitCast(sym, to: (@convention(c) (UnsafeMutableRawPointer, MTContactCallbackFunction) -> Void).self)
 }()
 
+// Optional: absent on some systems, in which case devices are only stopped.
+private let _MTUnregisterContactFrameCallback: (@convention(c) (UnsafeMutableRawPointer, MTContactCallbackFunction) -> Void)? = {
+    guard let handle = mtFramework, let sym = dlsym(handle, "MTUnregisterContactFrameCallback") else { return nil }
+    return unsafeBitCast(sym, to: (@convention(c) (UnsafeMutableRawPointer, MTContactCallbackFunction) -> Void).self)
+}()
+
 // ============================================================================
 // MARK: - Action Definitions
 // ============================================================================
@@ -370,6 +376,8 @@ func savePreferences() {
 let touchCallback: MTContactCallbackFunction = { device, touchData, numTouches, timestamp, _ in
     let contacts = parseContacts(UnsafeRawPointer(touchData), count: Int(numTouches))
     DispatchQueue.main.async {
+        // Frames queued before a restart can arrive after it; ignore stopped devices.
+        guard registeredDevices.contains(where: { $0 == device }) else { return }
         lastTouchedDevice = device
         handleTouchFrame(contacts: contacts, timestamp: timestamp)
     }
@@ -437,10 +445,10 @@ func handleTouchFrame(contacts: [TouchContact]?, timestamp: Double) {
 // MARK: - Device Management
 // ============================================================================
 
-func startMultitouchMonitoring() {
+@discardableResult
+func startMultitouchMonitoring() -> Int {
     let cfList = _MTDeviceCreateList()
     let count = CFArrayGetCount(cfList)
-    if count == 0 { print("❌ No multitouch devices found"); return }
 
     registeredDevices.removeAll()
     for i in 0..<count {
@@ -453,15 +461,41 @@ func startMultitouchMonitoring() {
         }
     }
     print("📱 Monitoring \(registeredDevices.count)/\(count) device(s)")
+    return registeredDevices.count
 }
+
+private var restartGeneration = 0
 
 func restartMonitoring() {
     pipeline.cancel()
     HapticOutput.forgetActuators()
     lastTouchedDevice = nil
-    for d in registeredDevices { _MTDeviceStop(d) }
+    for d in registeredDevices {
+        _MTUnregisterContactFrameCallback?(d, touchCallback)
+        _MTDeviceStop(d)
+    }
     registeredDevices.removeAll()
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { startMultitouchMonitoring() }
+
+    restartGeneration += 1
+    let generation = restartGeneration
+    var schedule = RetrySchedule()
+
+    func attempt() {
+        guard let delay = schedule.nextDelay() else {
+            print("❌ No trackpad found after waking")
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard generation == restartGeneration else { return }
+            let started = startMultitouchMonitoring()
+            if started > 0 {
+                print("✅ Touch detection restarted (\(started) device(s))")
+            } else {
+                attempt()
+            }
+        }
+    }
+    attempt()
 }
 
 // ============================================================================
@@ -1138,6 +1172,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if a.runModal() == .alertFirstButtonReturn {
                 openAccessibilitySettings()
             }
+        }
+
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { _ in
+            print("💤 Woke from sleep, restarting touch detection")
+            restartMonitoring()
         }
 
         setupStatusBar()

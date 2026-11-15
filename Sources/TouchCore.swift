@@ -271,3 +271,16 @@ struct HapticGate {
         return true
     }
 }
+
+/// The pauses between attempts to restart touch detection after wake.
+struct RetrySchedule {
+    static let delays: [Double] = [0.5, 1, 2, 3, 5, 8, 12]
+    private var index = 0
+
+    /// The pause before the next attempt, or nil when attempts are used up.
+    mutating func nextDelay() -> Double? {
+        guard index < RetrySchedule.delays.count else { return nil }
+        defer { index += 1 }
+        return RetrySchedule.delays[index]
+    }
+}

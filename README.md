@@ -88,6 +88,7 @@ git clone https://github.com/is-harshul/mac-gesture.git
 cd mac-gesture
 chmod +x build.sh
 ./build.sh
+./test.sh   # optional: run the pure-logic tests
 cp -r build/MacGesture.app /Applications/
 open /Applications/MacGesture.app
 ```
@@ -309,6 +310,20 @@ Single Swift file. No Xcode project. No dependencies.
 
 ---
 
+## Palm rejection and haptics
+
+Three settings in the menu bar control how taps are filtered and confirmed:
+
+- **Palm Rejection**: contacts that look like a resting palm are ignored, so a palm on the trackpad no longer changes the finger count. A 3-finger tap with a palm resting still fires; a 2-finger tap with a palm does not.
+- **Ignore Taps While Typing**: taps within about half a second of a key press are rejected. MacGesture's own simulated shortcuts do not trigger this.
+- **Haptic Feedback**: a tick when a gesture fires, in one of five styles (Off and four strengths). "Strongest" uses a private actuator and falls back to Crisp if it is unavailable.
+
+On macOS 26 the Launchpad action opens Apps, which replaced Launchpad.
+
+Touch detection restarts automatically after the Mac wakes from sleep, retrying for about 30 seconds if the trackpad is not back yet.
+
+---
+
 ## Contributing
 
 Ideas:
@@ -319,6 +334,10 @@ Ideas:
 - **SwiftUI settings window**
 
 ---
+
+## Acknowledgements
+
+The palm rejection approach draws on Kinara. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## License
 
