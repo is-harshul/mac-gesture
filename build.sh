@@ -89,7 +89,7 @@ swiftc \
     -framework Carbon \
     -framework ServiceManagement \
     -o "${MACOS}/${APP_NAME}" \
-    Sources/main.swift
+    Sources/*.swift
 
 echo "   ✅ Compiled successfully"
 

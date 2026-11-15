@@ -88,6 +88,7 @@ git clone https://github.com/is-harshul/mac-gesture.git
 cd mac-gesture
 chmod +x build.sh
 ./build.sh
+./test.sh   # optional: run the pure-logic tests
 cp -r build/MacGesture.app /Applications/
 open /Applications/MacGesture.app
 ```
@@ -199,18 +200,20 @@ Mac Gesture loads Apple's private `MultitouchSupport.framework` via `dlopen`. Th
 
 ```
 When 3+ fingers land:
-  → Record start time, finger count, centroid position
-  → Track peak finger count + centroid drift each frame
+  → Record start time, finger count, each finger's landing position
+  → Track peak finger count + the largest distance any single finger
+    has traveled from where it landed
 
-When all fingers lift:
+When the finger count first drops below its peak:
   → Determine gesture type from peak finger count (3, 4, or 5)
   → Look up the action for that finger count
+  → Nothing else fires until every finger lifts
 
   ✅ Fire action if ALL:
      • duration > 20ms             (not phantom)
      • duration < threshold         (default 120ms)
      • peak fingers == exactly 3/4/5 (no "passing through" counts)
-     • centroid drift < tolerance    (default 3mm)
+     • largest single-finger travel < tolerance (default 3mm)
      • an action is configured for that finger count
 
   ❌ Reject otherwise → gesture passes through to macOS
@@ -292,7 +295,11 @@ To publish a new version: bump version in `Info.plist`, push to `main`.
 ```
 mac-gesture/
 ├── .github/workflows/release.yml   # CI: auto-release on push
-├── Sources/main.swift               # Complete app (~760 lines)
+├── Sources/main.swift               # App: menu bar, actions, device management
+├── Sources/TouchCore.swift          # Pure touch logic (palm filter, tap recognizer, pipeline)
+├── Sources/Haptics.swift            # Haptic output
+├── Tests/main.swift                 # Pure-logic tests
+├── test.sh                          # Build and run the tests
 ├── Info.plist                       # Bundle metadata + version
 ├── icon.svg                         # App icon
 ├── build.sh                         # Compile + bundle
@@ -305,7 +312,21 @@ mac-gesture/
 └── README.md
 ```
 
-Single Swift file. No Xcode project. No dependencies.
+Plain Swift sources, no Xcode project, no dependencies.
+
+---
+
+## Palm rejection and haptics
+
+Three settings in the menu bar control how taps are filtered and confirmed:
+
+- **Palm Rejection**: contacts that look like a resting palm are ignored, so a palm on the trackpad no longer changes the finger count. A 3-finger tap with a palm resting still fires; a 2-finger tap with a palm does not.
+- **Ignore Taps While Typing**: taps within about half a second of a key press are rejected. MacGesture's own simulated shortcuts do not trigger this.
+- **Haptic Feedback**: a tick when a gesture fires, in one of five styles (Off and four strengths). "Strongest" uses a private actuator and falls back to Crisp if it is unavailable.
+
+On macOS 26 the Launchpad action opens Apps, which replaced Launchpad.
+
+Touch detection restarts automatically after the Mac wakes from sleep, retrying for about 30 seconds if the trackpad is not back yet.
 
 ---
 
@@ -319,6 +340,10 @@ Ideas:
 - **SwiftUI settings window**
 
 ---
+
+## Acknowledgements
+
+The palm rejection approach draws on Kinara. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## License
 

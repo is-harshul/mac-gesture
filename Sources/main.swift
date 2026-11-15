@@ -16,9 +16,9 @@ typealias MTContactCallbackFunction = @convention(c) (
 ) -> Void
 
 private let mtFrameworkPath = "/System/Library/PrivateFrameworks/MultitouchSupport.framework/MultitouchSupport"
-private let mtFramework: UnsafeMutableRawPointer? = dlopen(mtFrameworkPath, RTLD_LAZY)
+let mtFramework: UnsafeMutableRawPointer? = dlopen(mtFrameworkPath, RTLD_LAZY)
 
-private let _MTDeviceCreateList: @convention(c) () -> CFArray = {
+let _MTDeviceCreateList: @convention(c) () -> CFArray = {
     guard let handle = mtFramework, let sym = dlsym(handle, "MTDeviceCreateList") else {
         fatalError("Cannot load MTDeviceCreateList")
     }
@@ -46,41 +46,11 @@ private let _MTRegisterContactFrameCallback: @convention(c) (UnsafeMutableRawPoi
     return unsafeBitCast(sym, to: (@convention(c) (UnsafeMutableRawPointer, MTContactCallbackFunction) -> Void).self)
 }()
 
-// ============================================================================
-// MARK: - MTTouch Raw Memory Layout
-// ============================================================================
-
-let kNormXOffset = 32
-let kNormYOffset = 36
-var detectedStride: Int = 0
-
-func detectStride(touchData: UnsafeMutableRawPointer, count: Int) -> Int {
-    guard count >= 2 else { return 0 }
-    let candidates = [64, 72, 80, 84, 88, 96, 104, 112, 128]
-    for stride in candidates {
-        let x = touchData.load(fromByteOffset: stride + kNormXOffset, as: Float.self)
-        let y = touchData.load(fromByteOffset: stride + kNormYOffset, as: Float.self)
-        if x >= 0.0 && x <= 1.0 && y >= 0.0 && y <= 1.0 && (x > 0.001 || y > 0.001) {
-            return stride
-        }
-    }
-    return 0
-}
-
-func readAveragePosition(touchData: UnsafeMutableRawPointer, count: Int) -> (x: Float, y: Float)? {
-    guard detectedStride > 0, count > 0 else { return nil }
-    var sumX: Float = 0, sumY: Float = 0, valid = 0
-    for i in 0..<count {
-        let base = detectedStride * i
-        let x = touchData.load(fromByteOffset: base + kNormXOffset, as: Float.self)
-        let y = touchData.load(fromByteOffset: base + kNormYOffset, as: Float.self)
-        if x >= 0.0 && x <= 1.0 && y >= 0.0 && y <= 1.0 {
-            sumX += x; sumY += y; valid += 1
-        }
-    }
-    guard valid > 0 else { return nil }
-    return (sumX / Float(valid), sumY / Float(valid))
-}
+// Optional: absent on some systems, in which case devices are only stopped.
+private let _MTUnregisterContactFrameCallback: (@convention(c) (UnsafeMutableRawPointer, MTContactCallbackFunction) -> Void)? = {
+    guard let handle = mtFramework, let sym = dlsym(handle, "MTUnregisterContactFrameCallback") else { return nil }
+    return unsafeBitCast(sym, to: (@convention(c) (UnsafeMutableRawPointer, MTContactCallbackFunction) -> Void).self)
+}()
 
 // ============================================================================
 // MARK: - Action Definitions
@@ -115,7 +85,7 @@ enum TapAction: String, CaseIterable {
         case .pasteClipboard: return "Paste  (⌘V)"
         case .undo:           return "Undo  (⌘Z)"
         case .missionControl: return "Mission Control"
-        case .launchpad:      return "Launchpad"
+        case .launchpad:      return "Launchpad / Apps"
         case .spotlight:      return "Spotlight  (⌘Space)"
         case .customShortcut: return "Custom Shortcut"
         }
@@ -269,6 +239,8 @@ func simulateKeyCombo(key: Int, flags: CGEventFlags) {
           let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(key), keyDown: false) else { return }
     keyDown.flags = flags
     keyUp.flags = flags
+    keyDown.setIntegerValueField(.eventSourceUserData, value: kSyntheticEventMarker)
+    keyUp.setIntegerValueField(.eventSourceUserData, value: kSyntheticEventMarker)
     keyDown.post(tap: .cghidEventTap)
     usleep(15_000)
     keyUp.post(tap: .cghidEventTap)
@@ -276,10 +248,12 @@ func simulateKeyCombo(key: Int, flags: CGEventFlags) {
 }
 
 func openMissionControl() {
-    // Key code 160 = Mission Control (F3/Exposé key), same approach as Launchpad.
+    // Key code 160 = Mission Control (F3/Exposé key).
     // Falls back to launching Mission Control.app if the key event doesn't work.
     if let kd = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(160), keyDown: true),
        let ku = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(160), keyDown: false) {
+        kd.setIntegerValueField(.eventSourceUserData, value: kSyntheticEventMarker)
+        ku.setIntegerValueField(.eventSourceUserData, value: kSyntheticEventMarker)
         kd.post(tap: .cghidEventTap); usleep(15_000); ku.post(tap: .cghidEventTap)
     } else {
         NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Mission Control.app"))
@@ -287,12 +261,10 @@ func openMissionControl() {
 }
 
 func openLaunchpad() {
-    if let kd = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(160), keyDown: true),
-       let ku = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(160), keyDown: false) {
-        kd.post(tap: .cghidEventTap); usleep(15_000); ku.post(tap: .cghidEventTap)
-    } else {
-        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Launchpad.app"))
-    }
+    // Launchpad was removed in macOS 26, where the Apps app replaces it.
+    let launchpad = "/System/Applications/Launchpad.app"
+    let path = FileManager.default.fileExists(atPath: launchpad) ? launchpad : "/System/Applications/Apps.app"
+    NSWorkspace.shared.open(URL(fileURLWithPath: path))
 }
 
 // ============================================================================
@@ -329,17 +301,20 @@ var tapThreshold: TimeInterval = 0.12
 let minTapDuration: TimeInterval = 0.02
 var maxMovement: Float = 0.03
 
-var touchStartTime: TimeInterval = 0
-var isTrackingTouch = false
-var maxFingersInGesture: Int32 = 0
-var startCentroid: (x: Float, y: Float)? = nil
-var maxDeviation: Float = 0.0
+var pipeline = TouchPipeline()
+var palmRejectionEnabled = true
+var ignoreWhileTyping = true
+let kSyntheticEventMarker: Int64 = 0x4D47_5354   // "MGST"
+var lastTouchedDevice: UnsafeMutableRawPointer?
 var registeredDevices: [UnsafeMutableRawPointer] = []
 
 let defaults = UserDefaults.standard
 let kSensitivity = "tapThreshold"
 let kEnabled = "isEnabled"
 let kMaxMovement = "maxMovement"
+let kPalmRejection = "palmRejection"
+let kIgnoreWhileTyping = "ignoreWhileTyping"
+let kHapticStyle = "hapticStyle"
 
 func loadPreferences() {
     if let s = defaults.string(forKey: gesture3.prefKey), let a = TapAction(rawValue: s) { gesture3.action = a }
@@ -348,6 +323,10 @@ func loadPreferences() {
     if defaults.object(forKey: kSensitivity) != nil { tapThreshold = defaults.double(forKey: kSensitivity) }
     if defaults.object(forKey: kEnabled) != nil { isEnabled = defaults.bool(forKey: kEnabled) }
     if defaults.object(forKey: kMaxMovement) != nil { maxMovement = Float(defaults.double(forKey: kMaxMovement)) }
+    if defaults.object(forKey: kPalmRejection) != nil { palmRejectionEnabled = defaults.bool(forKey: kPalmRejection) }
+    if defaults.object(forKey: kIgnoreWhileTyping) != nil { ignoreWhileTyping = defaults.bool(forKey: kIgnoreWhileTyping) }
+    hapticStyle = defaults.string(forKey: kHapticStyle).flatMap(HapticStyle.init(rawValue:)) ?? .standard
+    pipeline.palmRejection = palmRejectionEnabled
 
     // Load custom shortcuts
     for fc in [3, 4, 5] {
@@ -377,6 +356,9 @@ func savePreferences() {
     defaults.set(tapThreshold, forKey: kSensitivity)
     defaults.set(isEnabled, forKey: kEnabled)
     defaults.set(Double(maxMovement), forKey: kMaxMovement)
+    defaults.set(palmRejectionEnabled, forKey: kPalmRejection)
+    defaults.set(ignoreWhileTyping, forKey: kIgnoreWhileTyping)
+    defaults.set(hapticStyle.rawValue, forKey: kHapticStyle)
 
     // Save custom shortcuts
     for fc in [3, 4, 5] {
@@ -390,107 +372,72 @@ func savePreferences() {
 // MARK: - Multitouch Callback
 // ============================================================================
 
-let touchCallback: MTContactCallbackFunction = { _, touchData, numTouches, timestamp, frame in
+// Runs on the multitouch thread: parse only, then hand off to the main thread.
+let touchCallback: MTContactCallbackFunction = { device, touchData, numTouches, timestamp, _ in
+    let contacts = parseContacts(UnsafeRawPointer(touchData), count: Int(numTouches))
+    DispatchQueue.main.async {
+        // Frames queued before a restart can arrive after it; ignore stopped devices.
+        guard registeredDevices.contains(where: { $0 == device }) else { return }
+        lastTouchedDevice = device
+        handleTouchFrame(contacts: contacts, timestamp: timestamp)
+    }
+}
+
+func currentTapConfig() -> TapConfig {
+    var counts = Set<Int>()
+    for fc in [3, 4, 5] where gestureConfig(for: fc)?.action.isEnabled == true { counts.insert(fc) }
+    return TapConfig(maxDuration: tapThreshold,
+                     minDuration: minTapDuration,
+                     maxTravel: Double(maxMovement),
+                     typingCooldown: ignoreWhileTyping ? 0.45 : 0,
+                     enabledCounts: counts)
+}
+
+/// Hook called when a tap gesture is accepted, before its action runs.
+func gestureDidFire(fingers: Int) {
+    HapticOutput.play(hapticStyle)
+}
+
+private var loggedFrameAge = false
+private var loggedContactSizes = false
+
+func handleTouchFrame(contacts: [TouchContact]?, timestamp: Double) {
     guard isEnabled else { return }
-    let fingerCount = numTouches
-
-    // Auto-detect struct stride
-    if detectedStride == 0 && fingerCount >= 2 {
-        let stride = detectStride(touchData: touchData, count: Int(fingerCount))
-        if stride > 0 {
-            detectedStride = stride
-            if debugMode { print("🔧 Detected MTTouch stride: \(stride) bytes") }
+    let now = ProcessInfo.processInfo.systemUptime
+    if debugMode {
+        if !loggedFrameAge {
+            loggedFrameAge = true
+            print("⏱ frame age: \(String(format: "%.0f", (now - timestamp) * 1000)) ms")
         }
-    }
-
-    // 3+ fingers land → start tracking
-    if fingerCount >= 3 && !isTrackingTouch {
-        isTrackingTouch = true
-        touchStartTime = timestamp
-        maxFingersInGesture = fingerCount
-        maxDeviation = 0.0
-        startCentroid = readAveragePosition(touchData: touchData, count: Int(fingerCount))
-
-        if debugMode {
-            let pos = startCentroid.map { "(\(String(format: "%.3f", $0.x)), \(String(format: "%.3f", $0.y)))" } ?? "n/a"
-            print("👆 \(fingerCount)-finger touch started at \(pos)")
-        }
-    }
-
-    // While 3+ fingers are down → update peak count + track movement
-    if fingerCount >= 3 && isTrackingTouch {
-        // More fingers added → upgrade gesture (e.g. 3→4)
-        if fingerCount > maxFingersInGesture {
-            maxFingersInGesture = fingerCount
-            touchStartTime = timestamp
-            startCentroid = readAveragePosition(touchData: touchData, count: Int(fingerCount))
-            maxDeviation = 0.0
-            if debugMode { print("👆 Upgraded to \(fingerCount)-finger gesture") }
-        }
-
-        // Track movement ONLY at peak finger count.
-        // When fingers start lifting (4→3), the centroid shifts because a
-        // different set of fingers is down. We must stop tracking movement
-        // at that point to avoid false swipe rejection.
-        if fingerCount == maxFingersInGesture {
-            if let start = startCentroid,
-               let current = readAveragePosition(touchData: touchData, count: Int(fingerCount)) {
-                let dx = current.x - start.x
-                let dy = current.y - start.y
-                let dist = sqrtf(dx * dx + dy * dy)
-                maxDeviation = max(maxDeviation, dist)
+        if let c = contacts {
+            if c.isEmpty {
+                loggedContactSizes = false
+            } else if c.count >= 3 && !loggedContactSizes {
+                loggedContactSizes = true
+                let sizes = c.map { String(format: "%.1f×%.1f", $0.major, $0.minor) }.joined(separator: " ")
+                print("👆 \(c.count) contacts: \(sizes) mm")
             }
         }
     }
 
-    // Finger count dropped below peak → evaluate gesture immediately.
-    // Don't wait for all fingers to lift (fingerCount == 0), because the
-    // time spent going 4→3→2→1→0 adds to duration and causes rejection.
-    if isTrackingTouch && fingerCount < maxFingersInGesture {
-        isTrackingTouch = false
-        let duration = timestamp - touchStartTime
-        let peakFingers = Int(maxFingersInGesture)
+    let out = pipeline.handle(contacts: contacts, timestamp: timestamp, now: now, config: currentTapConfig())
 
-        let validDuration = duration > minTapDuration && duration < tapThreshold
-        let validMovement = maxDeviation < maxMovement
-
-        let config = gestureConfig(for: peakFingers)
-        let action = config?.action ?? .none
-        let validGesture = action.isEnabled
-
-        if debugMode {
-            let ms = String(format: "%.0f", duration * 1000)
-            let mv = String(format: "%.4f", maxDeviation)
-            let reasons = [
-                validDuration  ? nil : "duration(\(ms)ms)",
-                validMovement  ? nil : "movement(\(mv))",
-                validGesture   ? nil : "\(peakFingers)F not configured"
-            ].compactMap { $0 }
-
-            if validDuration && validMovement && validGesture {
-                print("✅ \(peakFingers)-FINGER TAP! \(ms)ms, moved \(mv) → \(action.displayName)")
-            } else if peakFingers >= 3 && peakFingers <= 5 {
-                print("❌ Rejected \(peakFingers)F: \(ms)ms, moved \(mv) — \(reasons.joined(separator: ", "))")
-            }
-        }
-
-        if validDuration && validMovement && validGesture {
-            let execAction = action
-            let fingers = peakFingers
-            DispatchQueue.main.async { executeGestureAction(action: execAction, fingerCount: fingers) }
-        }
-
-        maxFingersInGesture = 0
-        maxDeviation = 0.0
-        startCentroid = nil
+    if debugMode {
+        if out.palmsIgnored > 0 { print("🖐 Palm ignored (\(String(format: "%.0f", out.palmSize)) mm)") }
+        if let why = out.cancelled { print("⚠️ Gesture cancelled: \(why)") }
     }
 
-    // All fingers lifted → full reset (catches edge cases)
-    if fingerCount == 0 {
-        isTrackingTouch = false
-        maxFingersInGesture = 0
-        maxDeviation = 0.0
-        startCentroid = nil
+    guard let verdict = out.verdict else { return }
+    switch verdict {
+    case .tap(let fingers):
+        let action = gestureConfig(for: fingers)?.action ?? .none
+        if debugMode { print("✅ \(fingers)-FINGER TAP! → \(action.displayName)") }
+        gestureDidFire(fingers: fingers)
+        executeGestureAction(action: action, fingerCount: fingers)
+    case .rejected(let fingers, let reason, let duration, let travel):
+        if debugMode {
+            print("❌ Rejected \(fingers)F: \(String(format: "%.0f", duration * 1000))ms, moved \(String(format: "%.4f", travel)) — \(reason.rawValue)")
+        }
     }
 }
 
@@ -498,12 +445,24 @@ let touchCallback: MTContactCallbackFunction = { _, touchData, numTouches, times
 // MARK: - Device Management
 // ============================================================================
 
-func startMultitouchMonitoring() {
+/// Unregisters and stops every running device and clears the list.
+func stopMultitouchMonitoring() {
+    for d in registeredDevices {
+        _MTUnregisterContactFrameCallback?(d, touchCallback)
+        _MTDeviceStop(d)
+    }
+    registeredDevices.removeAll()
+}
+
+@discardableResult
+func startMultitouchMonitoring() -> Int {
+    stopMultitouchMonitoring()  // never leak devices that are already running
+    // The returned CFArray is intentionally not released: it keeps the unretained
+    // device pointers in registeredDevices/lastTouchedDevice alive. Releasing it
+    // would require retaining each started device first.
     let cfList = _MTDeviceCreateList()
     let count = CFArrayGetCount(cfList)
-    if count == 0 { print("❌ No multitouch devices found"); return }
 
-    registeredDevices.removeAll()
     for i in 0..<count {
         guard let rawPtr = CFArrayGetValueAtIndex(cfList, i) else { continue }
         let device = UnsafeMutableRawPointer(mutating: rawPtr)
@@ -513,13 +472,44 @@ func startMultitouchMonitoring() {
             print("✅ Device \(i): started")
         }
     }
-    print("📱 Monitoring \(registeredDevices.count)/\(count) device(s)")
+    if !registeredDevices.isEmpty {
+        print("📱 Monitoring \(registeredDevices.count)/\(count) device(s)")
+    }
+    return registeredDevices.count
 }
 
+private var restartGeneration = 0
+
 func restartMonitoring() {
-    for d in registeredDevices { _MTDeviceStop(d) }
-    registeredDevices.removeAll()
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { startMultitouchMonitoring() }
+    pipeline.cancel()
+    HapticOutput.forgetActuators()
+    lastTouchedDevice = nil
+    stopMultitouchMonitoring()
+
+    restartGeneration += 1
+    let generation = restartGeneration
+    var schedule = RetrySchedule()
+
+    func attempt() {
+        guard let delay = schedule.nextDelay() else {
+            print("❌ No trackpad found after restart")
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard generation == restartGeneration else { return }
+            if !registeredDevices.isEmpty {
+                print("✅ Touch detection restarted (\(registeredDevices.count) device(s))")
+                return
+            }
+            let started = startMultitouchMonitoring()
+            if started > 0 {
+                print("✅ Touch detection restarted (\(started) device(s))")
+            } else {
+                attempt()
+            }
+        }
+    }
+    attempt()
 }
 
 // ============================================================================
@@ -706,7 +696,19 @@ class GesturePopoverVC: NSViewController {
         debugBtn.frame.origin = CGPoint(x: padH, y: y)
         view.addSubview(debugBtn)
         y += 22
-        
+
+        let palmBtn = makeCheckbox("Palm Rejection", checked: palmRejectionEnabled, action: #selector(appDelegate?.togglePalmRejection))
+        palmBtn.target = appDelegate
+        palmBtn.frame.origin = CGPoint(x: padH, y: y)
+        view.addSubview(palmBtn)
+        y += 22
+
+        let typingBtn = makeCheckbox("Ignore Taps While Typing", checked: ignoreWhileTyping, action: #selector(appDelegate?.toggleIgnoreWhileTyping))
+        typingBtn.target = appDelegate
+        typingBtn.frame.origin = CGPoint(x: padH, y: y)
+        view.addSubview(typingBtn)
+        y += 22
+
         // Open at Login toggle (macOS 13.0+)
         if #available(macOS 13.0, *) {
             let loginBtn = makeCheckbox("Open at Login", checked: isLoginItemEnabled(), action: #selector(appDelegate?.toggleLoginItem))
@@ -767,6 +769,19 @@ class GesturePopoverVC: NSViewController {
         }
         durPopup.target = appDelegate; durPopup.action = #selector(appDelegate?.durationChanged(_:))
         view.addSubview(durPopup)
+        y += 28
+
+        // Haptic feedback
+        label("Haptic Feedback", at: &y)
+        let hapticPopup = NSPopUpButton(frame: NSRect(x: padH, y: y, width: innerW, height: 24), pullsDown: false)
+        hapticPopup.font = .systemFont(ofSize: 11); hapticPopup.controlSize = .small
+        for (i, style) in HapticStyle.allCases.enumerated() {
+            hapticPopup.addItem(withTitle: style.label)
+            hapticPopup.item(at: i)?.representedObject = style.rawValue
+            if style == hapticStyle { hapticPopup.selectItem(at: i) }
+        }
+        hapticPopup.target = appDelegate; hapticPopup.action = #selector(appDelegate?.hapticChanged(_:))
+        view.addSubview(hapticPopup)
         y += 28
 
         sep(&y)
@@ -1146,6 +1161,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var popover = NSPopover()
     var popoverVC: GesturePopoverVC!
     var accessibilityTimer: Timer?
+    var keyMonitor: Any?
 
     func applicationDidFinishLaunching(_ note: Notification) {
         print("========================================")
@@ -1172,8 +1188,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { _ in
+            print("💤 Woke from sleep, restarting touch detection")
+            restartMonitoring()
+        }
+
         setupStatusBar()
-        startMultitouchMonitoring()
+        if startMultitouchMonitoring() == 0 { print("❌ No multitouch devices found") }
+
+        // Typing cooldown: global monitors run on the main thread. Skip the app's own synthetic keys.
+        keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+            if event.cgEvent?.getIntegerValueField(.eventSourceUserData) == kSyntheticEventMarker { return }
+            pipeline.keyDown(at: event.timestamp)
+        }
 
         // Periodic accessibility re-check (every 5s) — auto-restart monitoring when granted
         accessibilityTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
@@ -1260,6 +1289,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func toggleEnabled(_ sender: NSButton) {
         isEnabled = (sender.state == .on)
+        pipeline.cancel()
         updateIcon()
         savePreferences()
     }
@@ -1269,6 +1299,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if debugMode { print("🔍 Debug ON — tap the trackpad to see events") }
     }
     
+    @objc func togglePalmRejection(_ sender: NSButton) {
+        palmRejectionEnabled = (sender.state == .on)
+        pipeline.palmRejection = palmRejectionEnabled
+        savePreferences()
+    }
+
+    @objc func toggleIgnoreWhileTyping(_ sender: NSButton) {
+        ignoreWhileTyping = (sender.state == .on)
+        savePreferences()
+    }
+
     @objc func toggleLoginItem(_ sender: NSButton) {
         let enabled = (sender.state == .on)
         setLoginItem(enabled)
@@ -1279,6 +1320,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         tapThreshold = val
         savePreferences()
         print("⏱️ Tap duration → \(Int(val * 1000))ms")
+    }
+
+    @objc func hapticChanged(_ sender: NSPopUpButton) {
+        guard let raw = sender.selectedItem?.representedObject as? String,
+              let style = HapticStyle(rawValue: raw) else { return }
+        hapticStyle = style
+        savePreferences()
+        HapticOutput.play(hapticStyle)
     }
 
     @objc func movementChanged(_ sender: NSPopUpButton) {
