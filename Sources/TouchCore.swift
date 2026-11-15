@@ -204,3 +204,57 @@ struct MultiFingerTapRecognizer {
         return nil
     }
 }
+
+// MARK: - Touch pipeline
+
+struct TouchPipeline {
+    static let maximumFrameAge = 0.12   // seconds
+
+    struct Output {
+        var verdict: TapVerdict?
+        var palmsIgnored = 0     // palms first seen in this frame
+        var palmSize = 0.0       // mm, largest of them
+        var cancelled: String?   // "stale", "malformed" or "palm" when this frame cancelled the gesture
+    }
+
+    var palmRejection = true
+    private var recognizer = MultiFingerTapRecognizer()
+    private var palmFilter = PalmFilter()
+
+    mutating func keyDown(at timestamp: Double) { recognizer.keyDown(at: timestamp) }
+    mutating func cancel() { recognizer.cancel() }
+
+    /// contacts == nil means parseContacts reported a malformed frame.
+    mutating func handle(contacts: [TouchContact]?, timestamp: Double, now: Double, config: TapConfig) -> Output {
+        var output = Output()
+        guard let contacts = contacts else {
+            recognizer.cancel()
+            output.cancelled = "malformed"
+            return output
+        }
+        if now - timestamp > TouchPipeline.maximumFrameAge {
+            recognizer.cancel()
+            output.cancelled = "stale"
+            if contacts.isEmpty {
+                // A late lift still unblocks the recognizer and clears the palm filter.
+                _ = palmFilter.filter(contacts)
+                _ = recognizer.process(contacts: contacts, timestamp: timestamp, config: config)
+            }
+            return output
+        }
+        var passed = contacts
+        if palmRejection {
+            let result = palmFilter.filter(contacts)
+            output.palmsIgnored = result.newPalms
+            output.palmSize = result.palmSize
+            if result.withdrewFinger {
+                recognizer.cancel()
+                output.cancelled = "palm"
+                return output
+            }
+            passed = result.fingers
+        }
+        output.verdict = recognizer.process(contacts: passed, timestamp: timestamp, config: config)
+        return output
+    }
+}

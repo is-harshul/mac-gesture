@@ -349,6 +349,78 @@ func testRejectionCarriesMeasurements() {
     expect(v?.travel == 0, "travel")
 }
 
+// MARK: - Pipeline tests
+
+func palm() -> TouchContact { c(9, 0.5, 0.1, major: 26, minor: 16) }
+
+func testPipelinePalmPlusThreeFingersTaps() {
+    var p = TouchPipeline()
+    let cfg = tapConfig()
+    let o1 = p.handle(contacts: fingers(3) + [palm()], timestamp: 0.00, now: 0.00, config: cfg)
+    expect(o1.palmsIgnored == 1, "palmsIgnored")
+    expect(o1.palmSize == 26, "palmSize")
+    expect(o1.verdict == nil, "start nil")
+    _ = p.handle(contacts: fingers(3) + [palm()], timestamp: 0.05, now: 0.05, config: cfg)
+    let o3 = p.handle(contacts: fingers(2) + [palm()], timestamp: 0.06, now: 0.06, config: cfg)
+    expect(o3.verdict == .tap(fingers: 3), "tap")
+}
+
+func testPipelinePalmPlusTwoFingersNoTap() {
+    var p = TouchPipeline()
+    let cfg = tapConfig()
+    let a = p.handle(contacts: fingers(2) + [palm()], timestamp: 0.00, now: 0.00, config: cfg)
+    let b = p.handle(contacts: fingers(1) + [palm()], timestamp: 0.06, now: 0.06, config: cfg)
+    expect(a.verdict == nil && b.verdict == nil, "no verdicts")
+}
+
+func testPipelinePalmRejectionOffCountsPalm() {
+    var p = TouchPipeline()
+    p.palmRejection = false
+    var cfg = TapConfig()
+    cfg.enabledCounts = [3]
+    _ = p.handle(contacts: fingers(2) + [palm()], timestamp: 0.00, now: 0.00, config: cfg)
+    let o = p.handle(contacts: fingers(1) + [palm()], timestamp: 0.06, now: 0.06, config: cfg)
+    expect(o.verdict == .tap(fingers: 3), "palm counted")
+}
+
+func testPipelineStaleFrameCancels() {
+    var p = TouchPipeline()
+    let cfg = tapConfig()
+    _ = p.handle(contacts: fingers(3), timestamp: 0.00, now: 0.00, config: cfg)
+    let stale = p.handle(contacts: fingers(3), timestamp: 0.04, now: 0.30, config: cfg)
+    expect(stale.cancelled == "stale", "stale")
+    expect(p.handle(contacts: fingers(2), timestamp: 0.06, now: 0.06, config: cfg).verdict == nil, "blocked")
+    _ = p.handle(contacts: [], timestamp: 0.07, now: 0.07, config: cfg)
+    _ = p.handle(contacts: fingers(3), timestamp: 1.00, now: 1.00, config: cfg)
+    expect(p.handle(contacts: fingers(2), timestamp: 1.06, now: 1.06, config: cfg).verdict == .tap(fingers: 3), "fresh tap")
+}
+
+func testPipelineMalformedCancels() {
+    var p = TouchPipeline()
+    let cfg = tapConfig()
+    _ = p.handle(contacts: fingers(3), timestamp: 0.00, now: 0.00, config: cfg)
+    expect(p.handle(contacts: nil, timestamp: 0.03, now: 0.03, config: cfg).cancelled == "malformed", "malformed")
+    expect(p.handle(contacts: fingers(2), timestamp: 0.06, now: 0.06, config: cfg).verdict == nil, "blocked")
+}
+
+func testPipelineFingerBecomingPalmCancels() {
+    var p = TouchPipeline()
+    let cfg = tapConfig()
+    _ = p.handle(contacts: fingers(3), timestamp: 0.00, now: 0.00, config: cfg)
+    var grown = fingers(3)
+    grown[0] = c(1, grown[0].x, grown[0].y, major: 14, minor: 12)
+    expect(p.handle(contacts: grown, timestamp: 0.03, now: 0.03, config: cfg).cancelled == "palm", "palm")
+    expect(p.handle(contacts: fingers(2), timestamp: 0.06, now: 0.06, config: cfg).verdict == nil, "blocked")
+}
+
+func testPipelineKeyDownForwards() {
+    var p = TouchPipeline()
+    let cfg = tapConfig()
+    p.keyDown(at: 1.0)
+    _ = p.handle(contacts: fingers(3), timestamp: 1.10, now: 1.10, config: cfg)
+    expect(rejection(p.handle(contacts: fingers(2), timestamp: 1.16, now: 1.16, config: cfg).verdict)?.reason == .typing, "typing")
+}
+
 // MARK: - Run
 
 test("testParseKeepsOnlyTouchingStates", testParseKeepsOnlyTouchingStates)
@@ -383,6 +455,13 @@ test("testCancelBlocksUntilFullLift", testCancelBlocksUntilFullLift)
 test("testReplacedFingerRejected", testReplacedFingerRejected)
 test("testTwoFingersNeverTrack", testTwoFingersNeverTrack)
 test("testRejectionCarriesMeasurements", testRejectionCarriesMeasurements)
+test("testPipelinePalmPlusThreeFingersTaps", testPipelinePalmPlusThreeFingersTaps)
+test("testPipelinePalmPlusTwoFingersNoTap", testPipelinePalmPlusTwoFingersNoTap)
+test("testPipelinePalmRejectionOffCountsPalm", testPipelinePalmRejectionOffCountsPalm)
+test("testPipelineStaleFrameCancels", testPipelineStaleFrameCancels)
+test("testPipelineMalformedCancels", testPipelineMalformedCancels)
+test("testPipelineFingerBecomingPalmCancels", testPipelineFingerBecomingPalmCancels)
+test("testPipelineKeyDownForwards", testPipelineKeyDownForwards)
 
 print("\(totalPassed) passed, \(totalFailed) failed")
 exit(totalFailed == 0 ? 0 : 1)
