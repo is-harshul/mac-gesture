@@ -47,3 +47,56 @@ func parseContacts(_ data: UnsafeRawPointer?, count: Int) -> [TouchContact]? {
     }
     return contacts
 }
+
+struct PalmFilter {
+    static let palmWidth = 10.0    // mm, narrow axis
+    static let palmLength = 17.0   // mm, long axis, only while nearly still
+    static let stillStep = 0.012   // normalized movement per frame
+
+    struct Result {
+        var fingers: [TouchContact] = []
+        var withdrewFinger = false  // a contact already passed as a finger became a palm
+        var newPalms = 0            // contacts first judged palms in this frame
+        var palmSize = 0.0          // largest axis among newPalms, mm
+    }
+
+    private var palms: Set<Int32> = []
+    private var fingers: [Int32: TouchContact] = [:]
+
+    static func isPalm(_ contact: TouchContact, still: Bool = true) -> Bool {
+        let major = max(contact.major, contact.minor)
+        let minor = min(contact.major, contact.minor)
+        guard major.isFinite, minor.isFinite, minor > 0 else { return false }
+        return minor >= palmWidth || (still && major >= palmLength)
+    }
+
+    mutating func filter(_ contacts: [TouchContact]) -> Result {
+        var result = Result()
+        var nextPalms: Set<Int32> = []
+        var nextFingers: [Int32: TouchContact] = [:]
+
+        for contact in contacts {
+            if palms.contains(contact.id) {
+                nextPalms.insert(contact.id)
+                continue
+            }
+            let previous = fingers[contact.id]
+            var still = true
+            if let p = previous {
+                still = hypot(contact.x - p.x, contact.y - p.y) <= PalmFilter.stillStep
+            }
+            if PalmFilter.isPalm(contact, still: still) {
+                nextPalms.insert(contact.id)
+                result.newPalms += 1
+                result.palmSize = max(result.palmSize, max(contact.major, contact.minor))
+                if previous != nil { result.withdrewFinger = true }
+            } else {
+                nextFingers[contact.id] = contact
+                result.fingers.append(contact)
+            }
+        }
+        palms = nextPalms
+        fingers = nextFingers
+        return result
+    }
+}
