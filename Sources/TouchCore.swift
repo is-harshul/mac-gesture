@@ -100,3 +100,107 @@ struct PalmFilter {
         return result
     }
 }
+
+// MARK: - Multi-finger tap recognizer
+
+struct TapConfig: Equatable {
+    var maxDuration = 0.12
+    var minDuration = 0.02
+    var maxTravel = 0.03
+    var typingCooldown = 0.45       // 0 disables the cooldown
+    var enabledCounts: Set<Int> = [3]
+}
+
+enum RejectReason: String { case duration, movement, notConfigured, typing, unstable }
+
+enum TapVerdict: Equatable {
+    case tap(fingers: Int)
+    case rejected(fingers: Int, reason: RejectReason, duration: Double, travel: Double)
+}
+
+struct MultiFingerTapRecognizer {
+    private enum Phase { case idle, tracking, blocked }
+
+    private var phase = Phase.idle
+    private var lastKeyDown: Double?
+    private var startTime = 0.0
+    private var peak = 0
+    private var trackedIDs = Set<Int32>()
+    private var origins: [Int32: (x: Double, y: Double)] = [:]
+    private var travel = 0.0
+    private var unstable = false
+    private var typedDuringTouch = false
+    private var startedInCooldown = false
+
+    mutating func keyDown(at timestamp: Double) {
+        lastKeyDown = timestamp
+        if phase == .tracking { typedDuringTouch = true }
+    }
+
+    /// Abandon the touch in progress; nothing is recognized until every finger lifts.
+    mutating func cancel() {
+        phase = .blocked
+    }
+
+    mutating func process(contacts: [TouchContact], timestamp: Double, config: TapConfig) -> TapVerdict? {
+        let count = contacts.count
+        switch phase {
+        case .blocked:
+            if count == 0 { phase = .idle }
+            return nil
+        case .idle:
+            guard count >= 3 else { return nil }
+            phase = .tracking
+            startedInCooldown = lastKeyDown.map { timestamp - $0 < config.typingCooldown } ?? false
+            typedDuringTouch = false
+            unstable = false
+            beginSegment(contacts, timestamp: timestamp)
+            return nil
+        case .tracking:
+            break
+        }
+
+        if count > peak {
+            beginSegment(contacts, timestamp: timestamp)
+            return nil
+        }
+        for contact in contacts {
+            if let o = origins[contact.id] {
+                travel = max(travel, hypot(contact.x - o.x, contact.y - o.y))
+            }
+        }
+        if count == peak {
+            if Set(contacts.map { $0.id }) != trackedIDs { unstable = true }
+            return nil
+        }
+
+        let duration = timestamp - startTime
+        let typing = config.typingCooldown > 0 && (startedInCooldown || typedDuringTouch)
+        let verdict: TapVerdict
+        if let reason = rejection(typing: typing, duration: duration, config: config) {
+            verdict = .rejected(fingers: peak, reason: reason, duration: duration, travel: travel)
+        } else {
+            verdict = .tap(fingers: peak)
+        }
+        phase = count == 0 ? .idle : .blocked
+        return verdict
+    }
+
+    private mutating func beginSegment(_ contacts: [TouchContact], timestamp: Double) {
+        startTime = timestamp
+        peak = contacts.count
+        travel = 0
+        trackedIDs = Set(contacts.map { $0.id })
+        origins = [:]
+        for contact in contacts { origins[contact.id] = (contact.x, contact.y) }
+    }
+
+    private func rejection(typing: Bool, duration: Double, config: TapConfig) -> RejectReason? {
+        if typing { return .typing }
+        if unstable { return .unstable }
+        if !config.enabledCounts.contains(peak) { return .notConfigured }
+        if !(duration > config.minDuration && duration < config.maxDuration) { return .duration }
+        if travel >= config.maxTravel { return .movement }
+        return nil
+    }
+}

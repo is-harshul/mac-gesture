@@ -188,6 +188,167 @@ func testFingersBesidePalmSurvive() {
     expect(r.fingers.count == 3, "three fingers survive, got \(r.fingers.count)")
 }
 
+// MARK: - Tap recognizer tests
+
+func fingers(_ n: Int, dx: Double = 0) -> [TouchContact] {
+    (0..<n).map { i in
+        let id = i + 1
+        return TouchContact(id: Int32(id), x: 0.2 * Double(id) + dx, y: 0.5, major: 8, minor: 7)
+    }
+}
+
+func tapConfig() -> TapConfig {
+    var config = TapConfig()
+    config.enabledCounts = [3, 4]
+    return config
+}
+
+func rejection(_ v: TapVerdict?) -> (fingers: Int, reason: RejectReason, duration: Double, travel: Double)? {
+    if case let .rejected(fingers, reason, duration, travel)? = v { return (fingers, reason, duration, travel) }
+    return nil
+}
+
+func testThreeFingerTap() {
+    var r = MultiFingerTapRecognizer()
+    let cfg = tapConfig()
+    expect(r.process(contacts: fingers(3), timestamp: 0.00, config: cfg) == nil, "start nil")
+    expect(r.process(contacts: fingers(3), timestamp: 0.05, config: cfg) == nil, "hold nil")
+    expect(r.process(contacts: fingers(2), timestamp: 0.06, config: cfg) == .tap(fingers: 3), "tap")
+}
+
+func testTooLongRejected() {
+    var r = MultiFingerTapRecognizer()
+    let cfg = tapConfig()
+    _ = r.process(contacts: fingers(3), timestamp: 0.00, config: cfg)
+    let v = rejection(r.process(contacts: fingers(2), timestamp: 0.20, config: cfg))
+    expect(v?.reason == .duration, "duration")
+    expect(v?.fingers == 3, "fingers")
+}
+
+func testTooShortRejected() {
+    var r = MultiFingerTapRecognizer()
+    let cfg = tapConfig()
+    _ = r.process(contacts: fingers(3), timestamp: 0.00, config: cfg)
+    expect(rejection(r.process(contacts: fingers(2), timestamp: 0.01, config: cfg))?.reason == .duration, "duration")
+}
+
+func testMovementRejected() {
+    var r = MultiFingerTapRecognizer()
+    let cfg = tapConfig()
+    _ = r.process(contacts: fingers(3), timestamp: 0.00, config: cfg)
+    let base = fingers(3)
+    let moved = [base[0], TouchContact(id: 2, x: base[1].x + 0.05, y: 0.5, major: 8, minor: 7), base[2]]
+    _ = r.process(contacts: moved, timestamp: 0.04, config: cfg)
+    expect(rejection(r.process(contacts: fingers(2), timestamp: 0.06, config: cfg))?.reason == .movement, "movement")
+}
+
+func testUniformSmallMovementAccepted() {
+    var r = MultiFingerTapRecognizer()
+    let cfg = tapConfig()
+    _ = r.process(contacts: fingers(3), timestamp: 0.00, config: cfg)
+    _ = r.process(contacts: fingers(3, dx: 0.01), timestamp: 0.04, config: cfg)
+    expect(r.process(contacts: fingers(2, dx: 0.01), timestamp: 0.06, config: cfg) == .tap(fingers: 3), "tap")
+}
+
+func testUpgradeResetsTimer() {
+    var r = MultiFingerTapRecognizer()
+    let cfg = tapConfig()
+    _ = r.process(contacts: fingers(3), timestamp: 0.00, config: cfg)
+    _ = r.process(contacts: fingers(4), timestamp: 0.10, config: cfg)
+    expect(r.process(contacts: fingers(3), timestamp: 0.15, config: cfg) == .tap(fingers: 4), "tap 4")
+}
+
+func testNoSecondVerdictUntilFullLift() {
+    var r = MultiFingerTapRecognizer()
+    let cfg = tapConfig()
+    _ = r.process(contacts: fingers(4), timestamp: 0.00, config: cfg)
+    expect(r.process(contacts: fingers(3), timestamp: 0.05, config: cfg) == .tap(fingers: 4), "tap 4")
+    expect(r.process(contacts: fingers(3), timestamp: 0.06, config: cfg) == nil, "3 nil")
+    expect(r.process(contacts: fingers(2), timestamp: 0.09, config: cfg) == nil, "2 nil")
+    expect(r.process(contacts: fingers(1), timestamp: 0.10, config: cfg) == nil, "1 nil")
+    expect(r.process(contacts: [], timestamp: 0.11, config: cfg) == nil, "0 nil")
+    _ = r.process(contacts: fingers(3), timestamp: 1.00, config: cfg)
+    expect(r.process(contacts: fingers(2), timestamp: 1.06, config: cfg) == .tap(fingers: 3), "fresh tap")
+}
+
+func testNotConfiguredRejected() {
+    var r = MultiFingerTapRecognizer()
+    var cfg = tapConfig()
+    cfg.enabledCounts = [3]
+    _ = r.process(contacts: fingers(5), timestamp: 0.00, config: cfg)
+    let v = rejection(r.process(contacts: fingers(4), timestamp: 0.05, config: cfg))
+    expect(v?.reason == .notConfigured, "notConfigured")
+    expect(v?.fingers == 5, "fingers")
+}
+
+func testTypingCooldownRejects() {
+    var r = MultiFingerTapRecognizer()
+    let cfg = tapConfig()
+    r.keyDown(at: 1.0)
+    _ = r.process(contacts: fingers(3), timestamp: 1.20, config: cfg)
+    expect(rejection(r.process(contacts: fingers(2), timestamp: 1.26, config: cfg))?.reason == .typing, "typing")
+    _ = r.process(contacts: [], timestamp: 1.30, config: cfg)
+    _ = r.process(contacts: fingers(3), timestamp: 1.50, config: cfg)
+    expect(r.process(contacts: fingers(2), timestamp: 1.56, config: cfg) == .tap(fingers: 3), "tap after cooldown")
+}
+
+func testKeyDownDuringTouchRejects() {
+    var r = MultiFingerTapRecognizer()
+    let cfg = tapConfig()
+    _ = r.process(contacts: fingers(3), timestamp: 2.00, config: cfg)
+    r.keyDown(at: 2.03)
+    expect(rejection(r.process(contacts: fingers(2), timestamp: 2.06, config: cfg))?.reason == .typing, "typing")
+}
+
+func testCooldownZeroDisablesTyping() {
+    var r = MultiFingerTapRecognizer()
+    var cfg = tapConfig()
+    cfg.typingCooldown = 0
+    r.keyDown(at: 1.0)
+    _ = r.process(contacts: fingers(3), timestamp: 1.01, config: cfg)
+    expect(r.process(contacts: fingers(2), timestamp: 1.07, config: cfg) == .tap(fingers: 3), "tap")
+}
+
+func testCancelBlocksUntilFullLift() {
+    var r = MultiFingerTapRecognizer()
+    let cfg = tapConfig()
+    _ = r.process(contacts: fingers(3), timestamp: 0.00, config: cfg)
+    r.cancel()
+    expect(r.process(contacts: fingers(3), timestamp: 0.03, config: cfg) == nil, "3 nil")
+    expect(r.process(contacts: fingers(2), timestamp: 0.06, config: cfg) == nil, "2 nil")
+    expect(r.process(contacts: [], timestamp: 0.07, config: cfg) == nil, "0 nil")
+    _ = r.process(contacts: fingers(3), timestamp: 1.00, config: cfg)
+    expect(r.process(contacts: fingers(2), timestamp: 1.06, config: cfg) == .tap(fingers: 3), "tap")
+}
+
+func testReplacedFingerRejected() {
+    var r = MultiFingerTapRecognizer()
+    let cfg = tapConfig()
+    func ids(_ list: [Int32]) -> [TouchContact] {
+        list.map { TouchContact(id: $0, x: 0.2 * Double($0), y: 0.5, major: 8, minor: 7) }
+    }
+    _ = r.process(contacts: ids([1, 2, 3]), timestamp: 0.00, config: cfg)
+    _ = r.process(contacts: ids([1, 2, 4]), timestamp: 0.04, config: cfg)
+    expect(rejection(r.process(contacts: ids([1, 2]), timestamp: 0.06, config: cfg))?.reason == .unstable, "unstable")
+}
+
+func testTwoFingersNeverTrack() {
+    var r = MultiFingerTapRecognizer()
+    let cfg = tapConfig()
+    expect(r.process(contacts: fingers(2), timestamp: 0.00, config: cfg) == nil, "2 nil")
+    expect(r.process(contacts: fingers(1), timestamp: 0.05, config: cfg) == nil, "1 nil")
+    expect(r.process(contacts: [], timestamp: 0.06, config: cfg) == nil, "0 nil")
+}
+
+func testRejectionCarriesMeasurements() {
+    var r = MultiFingerTapRecognizer()
+    let cfg = tapConfig()
+    _ = r.process(contacts: fingers(3), timestamp: 0.00, config: cfg)
+    let v = rejection(r.process(contacts: fingers(2), timestamp: 0.20, config: cfg))
+    expect(v != nil && abs(v!.duration - 0.20) < 1e-9, "duration")
+    expect(v?.travel == 0, "travel")
+}
+
 // MARK: - Run
 
 test("testParseKeepsOnlyTouchingStates", testParseKeepsOnlyTouchingStates)
@@ -207,6 +368,21 @@ test("testIdForgottenWhenAbsent", testIdForgottenWhenAbsent)
 test("testFingerGrowingIntoPalmWithdraws", testFingerGrowingIntoPalmWithdraws)
 test("testZeroShapeIsFinger", testZeroShapeIsFinger)
 test("testFingersBesidePalmSurvive", testFingersBesidePalmSurvive)
+test("testThreeFingerTap", testThreeFingerTap)
+test("testTooLongRejected", testTooLongRejected)
+test("testTooShortRejected", testTooShortRejected)
+test("testMovementRejected", testMovementRejected)
+test("testUniformSmallMovementAccepted", testUniformSmallMovementAccepted)
+test("testUpgradeResetsTimer", testUpgradeResetsTimer)
+test("testNoSecondVerdictUntilFullLift", testNoSecondVerdictUntilFullLift)
+test("testNotConfiguredRejected", testNotConfiguredRejected)
+test("testTypingCooldownRejects", testTypingCooldownRejects)
+test("testKeyDownDuringTouchRejects", testKeyDownDuringTouchRejects)
+test("testCooldownZeroDisablesTyping", testCooldownZeroDisablesTyping)
+test("testCancelBlocksUntilFullLift", testCancelBlocksUntilFullLift)
+test("testReplacedFingerRejected", testReplacedFingerRejected)
+test("testTwoFingersNeverTrack", testTwoFingersNeverTrack)
+test("testRejectionCarriesMeasurements", testRejectionCarriesMeasurements)
 
 print("\(totalPassed) passed, \(totalFailed) failed")
 exit(totalFailed == 0 ? 0 : 1)
