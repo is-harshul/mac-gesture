@@ -421,7 +421,7 @@ func testPipelineKeyDownForwards() {
     expect(rejection(p.handle(contacts: fingers(2), timestamp: 1.16, now: 1.16, config: cfg).verdict)?.reason == .typing, "typing")
 }
 
-// MARK: - Run
+// MARK: - Haptic gate tests
 
 func testHapticGateFirstPulseAllowed() {
     var g = HapticGate()
@@ -440,6 +440,8 @@ func testHapticGateRejectsNonFiniteTime() {
     expect(!g.allow(at: .nan), "nan refused")
     expect(g.allow(at: 1.0), "later finite time allowed")
 }
+
+// MARK: - Run
 
 test("testParseKeepsOnlyTouchingStates", testParseKeepsOnlyTouchingStates)
 test("testParseEmptyFrame", testParseEmptyFrame)

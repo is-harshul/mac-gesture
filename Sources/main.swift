@@ -458,6 +458,7 @@ func startMultitouchMonitoring() {
 func restartMonitoring() {
     pipeline.cancel()
     HapticOutput.forgetActuators()
+    lastTouchedDevice = nil
     for d in registeredDevices { _MTDeviceStop(d) }
     registeredDevices.removeAll()
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { startMultitouchMonitoring() }

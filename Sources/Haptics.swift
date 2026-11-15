@@ -75,7 +75,7 @@ enum HapticOutput {
     private static func fireActuator() -> Bool {
         guard let api = actuatorAPI else { return false }
         if let device = lastTouchedDevice, let act = actuator(for: device, api: api) {
-            return api.actuate(act, 6, 0, 0, 2) == 0
+            return actuate(act, api: api)
         }
         // No touch yet (settings preview): first device whose actuator opens.
         let list = _MTDeviceCreateList()
@@ -83,10 +83,25 @@ enum HapticOutput {
             guard let raw = CFArrayGetValueAtIndex(list, i) else { continue }
             let device = UnsafeMutableRawPointer(mutating: raw)
             if let act = actuator(for: device, api: api) {
-                return api.actuate(act, 6, 0, 0, 2) == 0
+                return actuate(act, api: api)
             }
         }
         return false
+    }
+
+    /// Fires the actuator. A cached actuator that fails is dropped and released so the next pulse re-creates it;
+    /// an uncached one (cache full) is released after the single pulse.
+    private static func actuate(_ act: UnsafeMutableRawPointer, api: ActuatorAPI) -> Bool {
+        let ok = api.actuate(act, 6, 0, 0, 2) == 0
+        if let key = actuators.first(where: { $0.value == act })?.key {
+            if !ok {
+                actuators[key] = nil
+                Unmanaged<AnyObject>.fromOpaque(act).release()
+            }
+        } else {
+            Unmanaged<AnyObject>.fromOpaque(act).release()
+        }
+        return ok
     }
 
     private static func actuator(for device: UnsafeMutableRawPointer, api: ActuatorAPI) -> UnsafeMutableRawPointer? {
@@ -99,9 +114,8 @@ enum HapticOutput {
             return nil
         }
         if actuators.count >= maxCachedActuators {
-            // Cache full: use it once without caching, then release.
-            Unmanaged<AnyObject>.fromOpaque(act).release()
-            return nil
+            // Cache full: returned uncached; `actuate` fires it once and releases it.
+            return act
         }
         actuators[id] = act
         return act
