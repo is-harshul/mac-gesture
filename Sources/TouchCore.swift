@@ -217,7 +217,7 @@ struct TouchPipeline {
         var cancelled: String?   // "stale", "malformed" or "palm" when this frame cancelled the gesture
     }
 
-    var palmRejection = true
+    var palmRejection = true { didSet { palmFilter = PalmFilter() } }
     private var recognizer = MultiFingerTapRecognizer()
     private var palmFilter = PalmFilter()
 

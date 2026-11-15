@@ -248,7 +248,7 @@ func simulateKeyCombo(key: Int, flags: CGEventFlags) {
 }
 
 func openMissionControl() {
-    // Key code 160 = Mission Control (F3/Exposé key), same approach as Launchpad.
+    // Key code 160 = Mission Control (F3/Exposé key).
     // Falls back to launching Mission Control.app if the key event doesn't work.
     if let kd = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(160), keyDown: true),
        let ku = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(160), keyDown: false) {
@@ -457,6 +457,9 @@ func stopMultitouchMonitoring() {
 @discardableResult
 func startMultitouchMonitoring() -> Int {
     stopMultitouchMonitoring()  // never leak devices that are already running
+    // The returned CFArray is intentionally not released: it keeps the unretained
+    // device pointers in registeredDevices/lastTouchedDevice alive. Releasing it
+    // would require retaining each started device first.
     let cfList = _MTDeviceCreateList()
     let count = CFArrayGetCount(cfList)
 
@@ -489,7 +492,7 @@ func restartMonitoring() {
 
     func attempt() {
         guard let delay = schedule.nextDelay() else {
-            print("❌ No trackpad found after waking")
+            print("❌ No trackpad found after restart")
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {

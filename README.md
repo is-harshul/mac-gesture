@@ -200,18 +200,20 @@ Mac Gesture loads Apple's private `MultitouchSupport.framework` via `dlopen`. Th
 
 ```
 When 3+ fingers land:
-  → Record start time, finger count, centroid position
-  → Track peak finger count + centroid drift each frame
+  → Record start time, finger count, each finger's landing position
+  → Track peak finger count + the largest distance any single finger
+    has traveled from where it landed
 
-When all fingers lift:
+When the finger count first drops below its peak:
   → Determine gesture type from peak finger count (3, 4, or 5)
   → Look up the action for that finger count
+  → Nothing else fires until every finger lifts
 
   ✅ Fire action if ALL:
      • duration > 20ms             (not phantom)
      • duration < threshold         (default 120ms)
      • peak fingers == exactly 3/4/5 (no "passing through" counts)
-     • centroid drift < tolerance    (default 3mm)
+     • largest single-finger travel < tolerance (default 3mm)
      • an action is configured for that finger count
 
   ❌ Reject otherwise → gesture passes through to macOS
