@@ -16,9 +16,9 @@ typealias MTContactCallbackFunction = @convention(c) (
 ) -> Void
 
 private let mtFrameworkPath = "/System/Library/PrivateFrameworks/MultitouchSupport.framework/MultitouchSupport"
-private let mtFramework: UnsafeMutableRawPointer? = dlopen(mtFrameworkPath, RTLD_LAZY)
+let mtFramework: UnsafeMutableRawPointer? = dlopen(mtFrameworkPath, RTLD_LAZY)
 
-private let _MTDeviceCreateList: @convention(c) () -> CFArray = {
+let _MTDeviceCreateList: @convention(c) () -> CFArray = {
     guard let handle = mtFramework, let sym = dlsym(handle, "MTDeviceCreateList") else {
         fatalError("Cannot load MTDeviceCreateList")
     }
@@ -308,6 +308,7 @@ let kEnabled = "isEnabled"
 let kMaxMovement = "maxMovement"
 let kPalmRejection = "palmRejection"
 let kIgnoreWhileTyping = "ignoreWhileTyping"
+let kHapticStyle = "hapticStyle"
 
 func loadPreferences() {
     if let s = defaults.string(forKey: gesture3.prefKey), let a = TapAction(rawValue: s) { gesture3.action = a }
@@ -318,6 +319,7 @@ func loadPreferences() {
     if defaults.object(forKey: kMaxMovement) != nil { maxMovement = Float(defaults.double(forKey: kMaxMovement)) }
     if defaults.object(forKey: kPalmRejection) != nil { palmRejectionEnabled = defaults.bool(forKey: kPalmRejection) }
     if defaults.object(forKey: kIgnoreWhileTyping) != nil { ignoreWhileTyping = defaults.bool(forKey: kIgnoreWhileTyping) }
+    hapticStyle = defaults.string(forKey: kHapticStyle).flatMap(HapticStyle.init(rawValue:)) ?? .standard
     pipeline.palmRejection = palmRejectionEnabled
 
     // Load custom shortcuts
@@ -350,6 +352,7 @@ func savePreferences() {
     defaults.set(Double(maxMovement), forKey: kMaxMovement)
     defaults.set(palmRejectionEnabled, forKey: kPalmRejection)
     defaults.set(ignoreWhileTyping, forKey: kIgnoreWhileTyping)
+    defaults.set(hapticStyle.rawValue, forKey: kHapticStyle)
 
     // Save custom shortcuts
     for fc in [3, 4, 5] {
@@ -383,7 +386,9 @@ func currentTapConfig() -> TapConfig {
 }
 
 /// Hook called when a tap gesture is accepted, before its action runs.
-func gestureDidFire(fingers: Int) {}
+func gestureDidFire(fingers: Int) {
+    HapticOutput.play(hapticStyle)
+}
 
 private var loggedFrameAge = false
 private var loggedContactSizes = false
@@ -452,6 +457,7 @@ func startMultitouchMonitoring() {
 
 func restartMonitoring() {
     pipeline.cancel()
+    HapticOutput.forgetActuators()
     for d in registeredDevices { _MTDeviceStop(d) }
     registeredDevices.removeAll()
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { startMultitouchMonitoring() }
@@ -714,6 +720,19 @@ class GesturePopoverVC: NSViewController {
         }
         durPopup.target = appDelegate; durPopup.action = #selector(appDelegate?.durationChanged(_:))
         view.addSubview(durPopup)
+        y += 28
+
+        // Haptic feedback
+        label("Haptic Feedback", at: &y)
+        let hapticPopup = NSPopUpButton(frame: NSRect(x: padH, y: y, width: innerW, height: 24), pullsDown: false)
+        hapticPopup.font = .systemFont(ofSize: 11); hapticPopup.controlSize = .small
+        for (i, style) in HapticStyle.allCases.enumerated() {
+            hapticPopup.addItem(withTitle: style.label)
+            hapticPopup.item(at: i)?.representedObject = style.rawValue
+            if style == hapticStyle { hapticPopup.selectItem(at: i) }
+        }
+        hapticPopup.target = appDelegate; hapticPopup.action = #selector(appDelegate?.hapticChanged(_:))
+        view.addSubview(hapticPopup)
         y += 28
 
         sep(&y)
@@ -1245,6 +1264,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         tapThreshold = val
         savePreferences()
         print("⏱️ Tap duration → \(Int(val * 1000))ms")
+    }
+
+    @objc func hapticChanged(_ sender: NSPopUpButton) {
+        guard let raw = sender.selectedItem?.representedObject as? String,
+              let style = HapticStyle(rawValue: raw) else { return }
+        hapticStyle = style
+        savePreferences()
+        HapticOutput.play(hapticStyle)
     }
 
     @objc func movementChanged(_ sender: NSPopUpButton) {

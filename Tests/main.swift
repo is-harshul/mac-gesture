@@ -423,6 +423,24 @@ func testPipelineKeyDownForwards() {
 
 // MARK: - Run
 
+func testHapticGateFirstPulseAllowed() {
+    var g = HapticGate()
+    expect(g.allow(at: 10.0), "first pulse allowed")
+}
+
+func testHapticGateBlocksWithinInterval() {
+    var g = HapticGate()
+    _ = g.allow(at: 10.0)
+    expect(!g.allow(at: 10.03), "within interval blocked")
+    expect(g.allow(at: 10.05), "refused call must not move the window")
+}
+
+func testHapticGateRejectsNonFiniteTime() {
+    var g = HapticGate()
+    expect(!g.allow(at: .nan), "nan refused")
+    expect(g.allow(at: 1.0), "later finite time allowed")
+}
+
 test("testParseKeepsOnlyTouchingStates", testParseKeepsOnlyTouchingStates)
 test("testParseEmptyFrame", testParseEmptyFrame)
 test("testParseRejectsNilPointerWithCount", testParseRejectsNilPointerWithCount)
@@ -462,6 +480,9 @@ test("testPipelineStaleFrameCancels", testPipelineStaleFrameCancels)
 test("testPipelineMalformedCancels", testPipelineMalformedCancels)
 test("testPipelineFingerBecomingPalmCancels", testPipelineFingerBecomingPalmCancels)
 test("testPipelineKeyDownForwards", testPipelineKeyDownForwards)
+test("testHapticGateFirstPulseAllowed", testHapticGateFirstPulseAllowed)
+test("testHapticGateBlocksWithinInterval", testHapticGateBlocksWithinInterval)
+test("testHapticGateRejectsNonFiniteTime", testHapticGateRejectsNonFiniteTime)
 
 print("\(totalPassed) passed, \(totalFailed) failed")
 exit(totalFailed == 0 ? 0 : 1)

@@ -258,3 +258,16 @@ struct TouchPipeline {
         return output
     }
 }
+
+/// Limits haptic pulses to one per `minimumInterval`. The caller supplies the clock.
+struct HapticGate {
+    static let minimumInterval = 0.05
+    private var lastPulse: Double?
+
+    mutating func allow(at time: Double) -> Bool {
+        guard time.isFinite else { return false }
+        if let last = lastPulse, time - last < HapticGate.minimumInterval { return false }
+        lastPulse = time
+        return true
+    }
+}
