@@ -29,7 +29,8 @@ jobs:
 
       - name: Run release script
         run: |
-          chmod +x release.sh build.sh package_dmg.sh
+          chmod +x release.sh build.sh package_dmg.sh test.sh
+          ./test.sh
           ./release.sh
 
       - name: Extract version & DMG path
