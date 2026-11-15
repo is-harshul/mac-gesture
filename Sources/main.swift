@@ -445,12 +445,21 @@ func handleTouchFrame(contacts: [TouchContact]?, timestamp: Double) {
 // MARK: - Device Management
 // ============================================================================
 
+/// Unregisters and stops every running device and clears the list.
+func stopMultitouchMonitoring() {
+    for d in registeredDevices {
+        _MTUnregisterContactFrameCallback?(d, touchCallback)
+        _MTDeviceStop(d)
+    }
+    registeredDevices.removeAll()
+}
+
 @discardableResult
 func startMultitouchMonitoring() -> Int {
+    stopMultitouchMonitoring()  // never leak devices that are already running
     let cfList = _MTDeviceCreateList()
     let count = CFArrayGetCount(cfList)
 
-    registeredDevices.removeAll()
     for i in 0..<count {
         guard let rawPtr = CFArrayGetValueAtIndex(cfList, i) else { continue }
         let device = UnsafeMutableRawPointer(mutating: rawPtr)
@@ -460,7 +469,9 @@ func startMultitouchMonitoring() -> Int {
             print("✅ Device \(i): started")
         }
     }
-    print("📱 Monitoring \(registeredDevices.count)/\(count) device(s)")
+    if !registeredDevices.isEmpty {
+        print("📱 Monitoring \(registeredDevices.count)/\(count) device(s)")
+    }
     return registeredDevices.count
 }
 
@@ -470,11 +481,7 @@ func restartMonitoring() {
     pipeline.cancel()
     HapticOutput.forgetActuators()
     lastTouchedDevice = nil
-    for d in registeredDevices {
-        _MTUnregisterContactFrameCallback?(d, touchCallback)
-        _MTDeviceStop(d)
-    }
-    registeredDevices.removeAll()
+    stopMultitouchMonitoring()
 
     restartGeneration += 1
     let generation = restartGeneration
@@ -487,6 +494,10 @@ func restartMonitoring() {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             guard generation == restartGeneration else { return }
+            if !registeredDevices.isEmpty {
+                print("✅ Touch detection restarted (\(registeredDevices.count) device(s))")
+                return
+            }
             let started = startMultitouchMonitoring()
             if started > 0 {
                 print("✅ Touch detection restarted (\(started) device(s))")
@@ -1182,7 +1193,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         setupStatusBar()
-        startMultitouchMonitoring()
+        if startMultitouchMonitoring() == 0 { print("❌ No multitouch devices found") }
 
         // Typing cooldown: global monitors run on the main thread. Skip the app's own synthetic keys.
         keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in

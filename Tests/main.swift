@@ -441,8 +441,6 @@ func testHapticGateRejectsNonFiniteTime() {
     expect(g.allow(at: 1.0), "later finite time allowed")
 }
 
-// MARK: - Run
-
 func testRetryScheduleYieldsDelaysInOrder() {
     var schedule = RetrySchedule()
     var got: [Double] = []
@@ -456,6 +454,8 @@ func testRetryScheduleEnds() {
     expect(schedule.nextDelay() == nil, "eighth call is nil")
     expect(schedule.nextDelay() == nil, "ninth call is nil")
 }
+
+// MARK: - Run
 
 test("testParseKeepsOnlyTouchingStates", testParseKeepsOnlyTouchingStates)
 test("testParseEmptyFrame", testParseEmptyFrame)

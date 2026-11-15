@@ -293,7 +293,11 @@ To publish a new version: bump version in `Info.plist`, push to `main`.
 ```
 mac-gesture/
 ├── .github/workflows/release.yml   # CI: auto-release on push
-├── Sources/main.swift               # Complete app (~760 lines)
+├── Sources/main.swift               # App: menu bar, actions, device management
+├── Sources/TouchCore.swift          # Pure touch logic (palm filter, tap recognizer, pipeline)
+├── Sources/Haptics.swift            # Haptic output
+├── Tests/main.swift                 # Pure-logic tests
+├── test.sh                          # Build and run the tests
 ├── Info.plist                       # Bundle metadata + version
 ├── icon.svg                         # App icon
 ├── build.sh                         # Compile + bundle
@@ -306,7 +310,7 @@ mac-gesture/
 └── README.md
 ```
 
-Single Swift file. No Xcode project. No dependencies.
+Plain Swift sources, no Xcode project, no dependencies.
 
 ---
 
